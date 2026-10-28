@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="snowflake-source" content="cortex-agent-authored" />
+<title>DevOps on Snowflake: A Practical Guide</title>
+<script type="application/json" id="snowflake-report-metadata">
+{
+  "generated": "2026-10-05",
+  "intent": "Customer-shareable DevOps / database change management guide for Snowflake: principles, DCM Projects (GA), schemachange, dbt, Terraform, Snowflake CLI, CI/CD, RBAC, account strategy, anonymized patterns.",
+  "dataSources": [
+    { "type": "doc", "url": "https://docs.snowflake.com/en/developer-guide/builders/devops-with-snowflake" },
+    { "type": "doc", "url": "https://docs.snowflake.com/en/release-notes/2026/other/2026-08-07-dcm-projects-ga" },
+    { "type": "doc", "url": "https://docs.snowflake.com/en/user-guide/dcm-projects/dcm-projects-supported-entities" },
+    { "type": "repo", "url": "https://github.com/Snowflake-Labs/schemachange" },
+    { "type": "kb", "url": "https://community.snowflake.com/s/article/default-secondary-roles-all-overview-and-additional-explanations" },
+    { "type": "doc", "url": "https://docs.snowflake.com/en/user-guide/scim-okta" }
+  ],
+  "sections": [
+    { "id": "principles", "title": "Core principles", "producerNotes": "Synthesized from customer engagements; aligned with public DevOps page CI/CD stages." },
+    { "id": "dcm", "title": "DCM Projects", "producerNotes": "Status and preview list from Aug 7 2026 GA release note; behaviors from supported-entities page. Re-check preview list when refreshing." },
+    { "id": "schemachange", "title": "schemachange", "producerNotes": "From Snowflake-Labs/schemachange README (V/R/A, .cli.yml, render/verify/dry-run, out-of-order) and the author's blog post on schemachange 4.3.0 CLI migration scripts (Feb 2026). No baseline feature in README." },
+    { "id": "patterns", "title": "Field patterns", "producerNotes": "Anonymized from two customer engagements; no names, dates or deal details." }
+  ]
+}
+</script>
+<style>
+  :root {
+    color-scheme: light dark;
+    --sf-blue: #29B5E8; --sf-mid-blue: #11567F; --sf-dark: #0A1628;
+    --sf-orange: #FF9F36; --sf-purple: #7D44CF; --sf-rose: #D45B90; --sf-gray: #8A999E;
+    --canvas: light-dark(#F4F7FA, #0b141b);
+    --surface: light-dark(#ffffff, #121f28);
+    --panel: light-dark(#F8FAFC, #182a35);
+    --text: light-dark(#3a4a5a, #d6dde2);
+    --heading: light-dark(#0A1628, #eef4f8);
+    --accent: light-dark(#11567F, #71D3DC);
+    --border: light-dark(#e0e7ef, #2a3d48);
+    --code-bg: #0D1117; --code-text: #E6EDF3;
+    --sidebar-w: 270px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: var(--canvas); color: var(--text); font-size: 15px; line-height: 1.6; }
+  img, svg { max-width: 100%; height: auto; }
+  a { color: var(--accent); }
+
+  /* sidebar */
+  #sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); background: var(--sf-dark); color: #fff; overflow-y: auto; z-index: 100; padding-bottom: 24px; }
+  .sidebar-header { display: flex; gap: 12px; align-items: center; padding: 22px 20px 18px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .sidebar-header img { width: 36px; height: 36px; }
+  .sidebar-logo { font-size: 17px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2; }
+  .sidebar-subtitle { font-size: 10px; color: rgba(255,255,255,0.45); margin-top: 3px; text-transform: uppercase; letter-spacing: 1px; }
+  .sidebar-section-label { padding: 18px 20px 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; color: rgba(255,255,255,0.35); font-weight: 700; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 20px; color: rgba(255,255,255,0.68); font-size: 13.5px; text-decoration: none; border-left: 3px solid transparent; }
+  .nav-item:hover { background: rgba(255,255,255,0.05); color: #fff; border-left-color: rgba(41,181,232,0.4); }
+  .nav-item.active { background: rgba(41,181,232,0.12); color: var(--sf-blue); border-left-color: var(--sf-blue); font-weight: 700; }
+  .nav-icon { width: 18px; text-align: center; font-size: 13px; opacity: 0.9; }
+  .nav-item .tag { display: none; }
+
+  /* main */
+  #main { margin-left: var(--sidebar-w); min-height: 100vh; }
+  .topbar { position: sticky; top: 0; z-index: 50; background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px clamp(16px, 3vw, 36px); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .topbar-title { font-size: 15px; font-weight: 700; color: var(--heading); }
+  .topbar-meta { font-size: 12px; color: var(--sf-gray); display: flex; gap: 8px; align-items: center; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sf-blue); display: inline-block; }
+  .content { padding: clamp(16px, 3vw, 36px); max-width: 1320px; }
+  .js .section { display: none; }
+  .js .section.active { display: block; }
+  .section { margin-bottom: 36px; }
+  .page-header { margin-bottom: 22px; }
+  .step-tag { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 3px 10px; border-radius: 20px; margin-bottom: 10px; }
+  .tag-found { background: #E3F2FD; color: #1565C0; }
+  .tag-tool { background: #EDE9FE; color: #4C1D95; }
+  .tag-deliv { background: #E8F5E9; color: #1B5E20; }
+  .tag-guide { background: #FFF3E0; color: #9A4A00; }
+  .page-title { font-size: 28px; font-weight: 700; color: var(--heading); margin: 0; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .page-desc { margin-top: 8px; font-size: 15.5px; color: var(--text); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: clamp(16px, 2.5vw, 28px); }
+  .card > :first-child { margin-top: 0; }
+  h3 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--accent); margin: 26px 0 12px; display: flex; align-items: center; gap: 8px; }
+  h3::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  p, li { max-width: 95ch; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 4px 0; }
+
+  .callout { border-left: 4px solid var(--sf-blue); background: light-dark(#EBF5FB, #12303f); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 14.5px; }
+  .callout.warn { border-left-color: #F39C12; background: light-dark(#FEF9E7, #3a2e12); }
+  .callout.note { border-left-color: var(--sf-purple); background: light-dark(#F3EEFC, #261a3a); }
+  .callout strong:first-child { color: var(--heading); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin: 16px 0; }
+  .grid .card, .two .card, .section .card .card { background: var(--panel); padding: 16px 18px; border-radius: 10px; }
+  .card h4 { margin: 0 0 6px; color: var(--heading); font-size: 14.5px; }
+  .card .card p { margin: 0 0 6px; font-size: 14px; }
+  .num { display: inline-flex; width: 24px; height: 24px; border-radius: 50%; background: var(--sf-blue); color: #fff; font-weight: 700; font-size: 12px; align-items: center; justify-content: center; margin-right: 8px; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 16px 0; }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; border: 1px solid var(--border); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th { background: light-dark(#EAF6FD, #15303f); color: var(--accent); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 14px; text-align: left; border-bottom: 2px solid light-dark(#c8dff0, #2a4a5c); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+
+  code { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 0.88em; background: light-dark(#eef2f6, #0d1820); color: light-dark(#4C1D95, #d2a8ff); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); color: var(--code-text); border-radius: 8px; padding: 16px 18px; overflow-x: auto; font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 13px; line-height: 1.65; margin: 14px 0; }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px; letter-spacing: 0.5px; vertical-align: middle; }
+  .tag.ga { background: rgba(46,204,113,0.14); color: #1A7A40; border: 1px solid rgba(46,204,113,0.35); }
+  .tag.pv { background: rgba(243,156,18,0.14); color: #8a4b00; }
+
+  .layers { display: grid; gap: 8px; margin: 4px 0 8px; }
+  .layer { display: grid; grid-template-columns: minmax(150px, 230px) minmax(0, 1fr); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+  .layer .l { color: #fff; font-weight: 700; padding: 12px 14px; text-transform: uppercase; letter-spacing: 0.5px; font-size: 12.5px; display: flex; align-items: center; }
+  .layer .r { background: var(--panel); padding: 12px 14px; font-size: 14px; }
+  .c1 { background: #11567F; } .c2 { background: #1b7fb3; } .c3 { background: #29B5E8; } .c4 { background: #7D44CF; } .c5 { background: #D45B90; } .c6 { background: #c27a1e; } .c7 { background: #5f6f75; }
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 14px 0; }
+  .flow .step { background: var(--panel); border: 1px solid var(--border); border-top: 4px solid var(--sf-blue); border-radius: 8px; padding: 12px 14px; font-size: 14px; }
+  .flow .step b { display: block; color: var(--heading); margin-bottom: 4px; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; }
+
+  .matrix { min-width: 980px; }
+  .matrix td:first-child { white-space: nowrap; }
+  .matrix th.rec { background: light-dark(#D6EFFB, #1a3d50); color: var(--heading); }
+  .matrix td.rec { background: light-dark(#F2FAFE, #10283a); }
+  .small-note { font-size: 13px; color: var(--sf-gray); }
+  .pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+  .pn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 16px; font-size: 13.5px; font-weight: 700; text-decoration: none; color: var(--accent); }
+  .pn:hover { border-color: var(--sf-blue); }
+  footer { padding: 8px clamp(16px, 3vw, 36px) 36px; font-size: 12.5px; color: var(--sf-gray); max-width: 1320px; }
+
+  @media (max-width: 900px) {
+    #sidebar { position: static; width: 100%; padding-bottom: 8px; }
+    #main { margin-left: 0; }
+    .sidebar-nav { display: flex; flex-wrap: wrap; padding: 0 12px; }
+    .sidebar-section-label { width: 100%; padding: 10px 8px 2px; }
+    .nav-item { border-left: none; border-radius: 6px; padding: 6px 10px; }
+    .topbar { position: static; }
+  }
+  @media (max-width: 560px) { .layer { grid-template-columns: minmax(0, 1fr); } .page-title { font-size: 22px; } }
+</style>
+</head>
+<body>
+
+<nav id="sidebar" aria-label="Guide navigation">
+  <div class="sidebar-header">
+    <img src="data:image/png;base64,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" alt="Snowflake" />
+    <div>
+      <div class="sidebar-logo">DevOps on Snowflake</div>
+      <div class="sidebar-subtitle">Change management &amp; CI/CD guide</div>
+    </div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="sidebar-section-label">Foundations</div>
+  <a class="nav-item" href="#principles" data-sec="principles"><span class="nav-icon">&#9733;</span>Core principles</a>
+  <a class="nav-item" href="#layers" data-sec="layers"><span class="nav-icon">&#9776;</span>The layers model</a>
+  <a class="nav-item" href="#approaches" data-sec="approaches"><span class="nav-icon">&#8646;</span>Declarative vs imperative</a>
+  <div class="sidebar-section-label">Tooling</div>
+  <a class="nav-item" href="#dcm" data-sec="dcm"><span class="nav-icon">&#10070;</span>DCM Projects</a>
+  <a class="nav-item" href="#schemachange" data-sec="schemachange"><span class="nav-icon">&#8635;</span>schemachange</a>
+  <a class="nav-item" href="#other-tools" data-sec="other-tools"><span class="nav-icon">&#9881;</span>Flyway &amp; Liquibase</a>
+  <a class="nav-item" href="#dbt" data-sec="dbt"><span class="nav-icon">&#9670;</span>dbt on Snowflake</a>
+  <a class="nav-item" href="#terraform" data-sec="terraform"><span class="nav-icon">&#9638;</span>Terraform</a>
+  <a class="nav-item" href="#complex" data-sec="complex"><span class="nav-icon">&#128230;</span>Code-backed objects</a>
+  <div class="sidebar-section-label">Delivery</div>
+  <a class="nav-item" href="#cicd" data-sec="cicd"><span class="nav-icon">&#10148;</span>CI/CD pipeline</a>
+  <a class="nav-item" href="#rbac" data-sec="rbac"><span class="nav-icon">&#128274;</span>Access &amp; RBAC</a>
+  <a class="nav-item" href="#accounts" data-sec="accounts"><span class="nav-icon">&#127970;</span>Account strategy</a>
+  <div class="sidebar-section-label">Guidance</div>
+  <a class="nav-item" href="#decision" data-sec="decision"><span class="nav-icon">&#9878;</span>Decision matrix</a>
+  <a class="nav-item" href="#patterns" data-sec="patterns"><span class="nav-icon">&#128269;</span>Field patterns</a>
+  <a class="nav-item" href="#antipatterns" data-sec="antipatterns"><span class="nav-icon">&#9888;</span>Anti-patterns</a>
+  <a class="nav-item" href="#resources" data-sec="resources"><span class="nav-icon">&#128279;</span>Resources</a>
+  </div>
+</nav>
+
+<div id="main">
+  <div class="topbar">
+    <div class="topbar-title">DevOps on Snowflake: A Practical Guide</div>
+    <div class="topbar-meta"><span class="dot"></span><span>Current as of October 2026 &#183; check linked docs before you implement</span></div>
+  </div>
+  <div class="content">
+
+    <section id="principles" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-found">Foundations &#183; 01</div>
+        <h2 class="page-title">Core principles</h2>
+        <div class="page-desc">Teams that do DevOps well on Snowflake agree on a few principles before they pick tools. The tools then follow from the principles, not the other way around.</div>
+      </div>
+      <div class="card">
+<div class="grid">
+    <div class="card"><h4><span class="num">1</span>Everything in Git</h4><p>Object definitions, migration scripts, transformation code, and app code all live in version control. Production gets nothing that didn't come through Git.</p></div>
+    <div class="card"><h4><span class="num">2</span>Deploy only through CI/CD</h4><p>Pipelines deploy with service users. Developers should touch production as little as possible.</p></div>
+    <div class="card"><h4><span class="num">3</span>Automated execution</h4><p>Pipelines run on schedules or events, such as new files landing or a stream having data. Nothing depends on a person remembering to click "run".</p></div>
+    <div class="card"><h4><span class="num">4</span>Deterministic, convergent state</h4><p>Every deployment moves an environment toward the same intended state. Dev, test, and prod differ only by configuration, not by hand-applied fixes.</p></div>
+    <div class="card"><h4><span class="num">5</span>Validate before you deploy</h4><p>Review a plan or dry run on every pull request. Look at creates, alters, and especially <em>drops</em> before you merge.</p></div>
+    <div class="card"><h4><span class="num">6</span>Roll forward</h4><p>When a deployment fails, ship a new forward change that fixes it. Hand-written undo scripts rarely work once data has changed.</p></div>
+    <div class="card"><h4><span class="num">7</span>One owner per object</h4><p>Exactly one tool manages each object. Two tools reconciling the same object will fight each other.</p></div>
+    <div class="card"><h4><span class="num">8</span>Decide what you automate</h4><p>Be explicit about what a central platform team provides and what each project team owns. That boundary drives tool choice more than features do.</p></div>
+  </div>
+  <div class="callout"><strong>No single tool covers everything.</strong> Real pipelines usually combine several mechanisms: one to manage object state, one for transformations (dbt), one for code-backed objects (Snowflake CLI), and something for account-level setup. That's normal. What matters is that each object has one clear owner and the pipeline runs the tools in a defined order.</div>
+  <h3>Build an object-ownership map</h3>
+  <p>Before choosing tools, list every object type you will manage and assign each one to exactly one owner. Do it on a whiteboard first, then keep the result in the repository as part of the project's documentation. Review it whenever a new object type or tool is added. An example:</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Scope</th><th>Object types</th><th>Owner (example)</th></tr></thead>
+    <tbody>
+      <tr><td><b>Account-level</b></td><td>Users, roles (identity)</td><td>Identity provider through SCIM</td></tr>
+      <tr><td><b>Account-level</b></td><td>Warehouses, databases, resource monitors, integrations, network rules and policies</td><td>Platform team (Terraform or DCM Projects)</td></tr>
+      <tr><td><b>Schema-level</b></td><td>Landing tables created by a replication or ingestion tool</td><td>That ingestion tool</td></tr>
+      <tr><td><b>Schema-level</b></td><td>Transformation tables and views</td><td>dbt</td></tr>
+      <tr><td><b>Schema-level</b></td><td>Schemas, raw tables, stages, file formats, pipes, streams, tasks, sequences, functions, procedures</td><td>Data team's change tool (DCM Projects or an imperative tool)</td></tr>
+      <tr><td><b>Code-backed</b></td><td>dbt Project objects, Streamlit apps, notebooks, packaged Snowpark code</td><td>Snowflake CLI, called from the pipeline</td></tr>
+      <tr><td><b>Grants</b></td><td>Privileges on all of the above</td><td>One declared permission model: DCM <code>GRANT</code>, Terraform, migration scripts, or a dedicated tool such as <a href="#permifrost">Permifrost</a> (see <a href="#rbac">Access &amp; RBAC</a>)</td></tr>
+    </tbody>
+  </table></div>
+      </div>
+      <div class="pager"><span></span><a class="pn" href="#layers">The layers model &#8594;</a></div>
+    </section>
+    <section id="layers" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-found">Foundations &#183; 02</div>
+        <h2 class="page-title">The layers model</h2>
+        <div class="page-desc">Most confusion about tools disappears once you split the platform into layers. Each layer changes at a different rate and usually has a different owner.</div>
+      </div>
+      <div class="card">
+<div class="layers">
+    <div class="layer"><div class="l c1">Account / environment</div><div class="r">Accounts, warehouses, top-level databases, roles, integrations, network rules and policies. Changes rarely and is owned by the platform team. <b>Typical tools:</b> Terraform, DCM Projects, or parameterized scripts.</div></div>
+    <div class="layer"><div class="l c2">Database objects</div><div class="r">Schemas, tables, views, stages, file formats, tasks, streams, dynamic tables, functions and procedures. Changes often and is owned by data engineering. <b>Typical tools:</b> DCM Projects, schemachange, Flyway, or Liquibase.</div></div>
+    <div class="layer"><div class="l c3">Transformation</div><div class="r">Models that produce tables and views from source data. <b>Typical tool:</b> dbt, run either as dbt Projects on Snowflake or as self-hosted dbt Core.</div></div>
+    <div class="layer"><div class="l c4">Code-backed objects</div><div class="r">dbt Projects, notebooks, Streamlit apps, Snowpark procedures and functions with packaged code, Snowpark Container Services, and code bundles. <b>Typical tool:</b> Snowflake CLI (<code>snow</code>), called directly or from a migration tool.</div></div>
+    <div class="layer"><div class="l c5">Ingestion</div><div class="r">Getting data in: Snowpipe, Snowpipe Streaming, Openflow, COPY, and partner tools. Ingestion is separate from transformation. Neither dbt nor change-management tools load data.</div></div>
+    <div class="layer"><div class="l c6">Orchestration</div><div class="r">When things run: Snowflake Tasks and task graphs (native), or an external orchestrator such as Airflow, Dagster, or Prefect when you need cross-system control.</div></div>
+    <div class="layer"><div class="l c7">Identity &amp; access</div><div class="r">Users and groups from your identity provider through SCIM, plus role hierarchies and grants. Usually a dedicated process with its own owner.</div></div>
+  </div>
+      </div>
+      <div class="pager"><a class="pn" href="#principles">&#8592; Core principles</a><a class="pn" href="#approaches">Declarative vs imperative &#8594;</a></div>
+    </section>
+    <section id="approaches" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-found">Foundations &#183; 03</div>
+        <h2 class="page-title">Declarative vs imperative</h2>
+        <div class="page-desc">Change-management tools fall into two families. Both are valid, and they solve the problem from opposite directions.</div>
+      </div>
+      <div class="card">
+<div class="table-wrap"><table>
+    <thead><tr><th></th><th>Declarative (desired state)</th><th>Imperative (migration scripts)</th></tr></thead>
+    <tbody>
+      <tr><td><b>How it works</b></td><td>You describe what objects should look like. The tool compares that with the account and works out the changes.</td><td>You write ordered scripts with the exact changes. The tool runs each one once and records that it ran.</td></tr>
+      <tr><td><b>Examples</b></td><td>DCM Projects, Terraform</td><td>schemachange, Flyway, Liquibase (changelogs)</td></tr>
+      <tr><td><b>Strengths</b></td><td>One readable definition per object. Plan and diff before deploy. Drift detection. Fewer files over time.</td><td>Can express any change, including data fixes, backfills, renames, and multi-step table rebuilds. Full audit history.</td></tr>
+      <tr><td><b>Trade-offs</b></td><td>Limited to what the tool can compare and <code>ALTER</code>. Renames and breaking changes need a separate step. Removing a definition can drop an object.</td><td>No single file shows "current state". History grows over time. Script authors are responsible for idempotency.</td></tr>
+      <tr><td><b>Data changes</b></td><td>Not the job of the definition files.</td><td>First-class. A script can <code>ALTER</code> and then <code>UPDATE</code>.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout note"><strong>Combining them.</strong> Many mature teams treat the two as complementary: a declarative definition for the shape of most objects, plus an imperative path for the changes it can't express, such as a backfill, a column type change that needs a rebuild, or a rename. If you combine them, give each object a clear owner and decide upfront which kinds of change take which path.</div>
+  <h3>What declarative diffs can't express</h3>
+  <p>A comparison tool sees only the before and after shape, not the intent. Moving data between structures needs an explicit, ordered script:</p>
+<pre><code>-- Move ownership from a column on ITEM to a new RELATIONSHIP table
+CREATE TABLE relationship (
+  item_id INT NOT NULL,
+  user_id INT NOT NULL,
+  type    VARCHAR NOT NULL
+);
+
+INSERT INTO relationship (item_id, user_id, type)
+  SELECT id, owner_id, 'owner' FROM item;
+
+ALTER TABLE item DROP COLUMN owner_id;</code></pre>
+  <p>A declarative diff would create the new table and drop the column, and the ownership data would be lost. This is why declarative setups still need a tracked imperative path.</p>
+  <h3>Organize the repository to match the approach</h3>
+  <div class="two">
+    <div class="card"><h4>Declarative</h4><p>Mirror the database: <code>database/schema/&lt;object type&gt;/&lt;object&gt;.sql</code>, one file per object, named after it. Browsing the repo feels like browsing the account.</p></div>
+    <div class="card"><h4>Imperative</h4><p>Don't copy the declarative folder tree. A migration script often changes several objects, so per-object folders cause confusion. Organize by release or version (for example <code>migrations/v2/</code>), and put the work-item or user-story ID in each file name, such as <code>V2.3.0__STORY-1234_add_channel.sql</code>, so every change traces back to a requirement.</p></div>
+  </div>
+  <p><b>How AI coding agents see "current state".</b> With declarative files, the agent can read the definitions. With a long migration history, the most reliable source is the live account: <code>INFORMATION_SCHEMA</code>, <code>SHOW</code>, and <code>GET_DDL</code>, against a non-production environment. Either way, give agents the repo <em>and</em> read-only metadata access.</p>
+      </div>
+      <div class="pager"><a class="pn" href="#layers">&#8592; The layers model</a><a class="pn" href="#dcm">DCM Projects &#8594;</a></div>
+    </section>
+    <section id="dcm" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-tool">Tooling &#183; 04</div>
+        <h2 class="page-title">DCM Projects <span class="tag ga">GA Aug 2026</span></h2>
+        <div class="page-desc">DCM Projects is Snowflake's native declarative change-management feature. Snowflake's <a href="https://docs.snowflake.com/en/developer-guide/builders/devops-with-snowflake">DevOps documentation</a> describes it as the recommended Snowflake-native option for objects inside your databases, with Terraform for the account and external-infrastructure layer.</div>
+      </div>
+      <div class="card">
+<h3>How it works</h3>
+  <ul>
+    <li><b>manifest.yml</b> sets deployment targets (account, project object, owner role) and templating configurations for each environment.</li>
+    <li><b>Definition files</b> under <code>sources/definitions/</code> contain <code>DEFINE</code>, <code>GRANT</code>, and <code>ATTACH</code> statements, with Jinja2 for variables, loops, and macros.</li>
+    <li><b>PLAN, then DEPLOY.</b> PLAN compares definitions with the account and lists creates, alters, and drops without changing anything. DEPLOY applies them. Each <code>DEFINE</code> runs as <code>CREATE OR ALTER</code>, so the <code>CREATE OR ALTER</code> limits for that object type apply.</li>
+    <li>You can run it from Snowsight, the Snowflake CLI (<code>snow dcm plan / deploy</code>), SQL (<code>EXECUTE DCM PROJECT</code>), or Cortex Code. Files can live in a Workspace, a Git repository, or a local directory.</li>
+  </ul>
+<pre><code>-- sources/definitions/raw.sql
+DEFINE SCHEMA {{db}}.RAW;
+
+DEFINE FILE FORMAT {{db}}.RAW.CSV_FMT TYPE = CSV SKIP_HEADER = 1;
+
+DEFINE TABLE {{db}}.RAW.ORDERS (
+  ORDER_ID NUMBER, CUSTOMER_ID NUMBER, AMOUNT NUMBER(12,2), LOADED_AT TIMESTAMP_NTZ
+);
+
+GRANT SELECT ON TABLE {{db}}.RAW.ORDERS TO ROLE {{env}}_ANALYST;</code></pre>
+<pre><code># validate on pull request, deploy on merge
+snow dcm plan   --target PROD
+snow dcm deploy --target PROD</code></pre>
+
+  <h3>Supported objects</h3>
+  <p>Coverage is broad and growing. It includes databases, schemas, tables, views, dynamic tables, tasks, stages, file formats, sequences, functions and procedures in all handler languages, alerts, semantic views, shares, tags, roles, warehouses, network rules, authentication and network policies, plus grants and data metric function attachments. Always check the <a href="https://docs.snowflake.com/en/user-guide/dcm-projects/dcm-projects-supported-entities">supported entities page</a> for the exact objects and properties you need.</p>
+  <div class="callout warn"><strong>Still in preview at GA</strong> (per the <a href="https://docs.snowflake.com/en/release-notes/2026/other/2026-08-07-dcm-projects-ga">GA release note</a>): TEST and PREVIEW commands, the GitHub Actions for DCM Projects, <code>DEFINE PIPE</code>, <code>DEFINE STREAM</code>, <code>DEFINE MASKING POLICY</code>, <code>DEFINE ROW ACCESS POLICY</code>, <code>ATTACH TAG</code>, inherited grants, and container-level <code>MANAGE GRANTS</code>. Streamlit and code bundle assets are also marked preview on the supported entities page.</div>
+
+  <h3>Behaviors to understand before production</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Behavior</th><th>What it means for you</th></tr></thead>
+    <tbody>
+      <tr><td>Removing a <code>DEFINE</code></td><td>The managed object is dropped on the next deploy. Make PR review of PLAN output, especially drops, a required gate.</td></tr>
+      <tr><td>Changes <code>ALTER</code> can't make</td><td>Only changes <code>CREATE OR ALTER</code> supports can be deployed. Renames and some column changes are done outside DCM (for example with <code>ALTER ... RENAME</code>), then the definition is updated so the next PLAN shows no change.</td></tr>
+      <tr><td>Data fixes and backfills</td><td>Not part of definition files. Use a separate, tracked mechanism such as an imperative tool or a controlled job.</td></tr>
+      <tr><td>Grants</td><td>DCM manages the grants it deployed. Removing a <code>GRANT</code> from definitions revokes it. Grants created outside DCM <em>coexist</em> and aren't removed, so DCM doesn't by itself enforce "no extra privileges".</td></tr>
+      <tr><td>Drift</td><td>A full PLAN against the last deployed definitions shows differences from the current account state.</td></tr>
+      <tr><td>Recovery</td><td>Redeploying an older definition reconciles object <em>shape</em>. It isn't a data rollback. Use Time Travel or clones for data.</td></tr>
+      <tr><td>Partial deploys</td><td>DEPLOY recomputes the changeset at run time, rather than replaying a saved PLAN. A failure during the DDL step can leave some changes applied. Fix the cause and deploy again to reach the defined state.</td></tr>
+      <tr><td>Tasks and alerts</td><td>New tasks and alerts are deployed suspended. Add <code>STARTED</code> to the definition if they should run. A task defined as <code>STARTED</code> is started again on the next deploy, even if someone suspended it by hand.</td></tr>
+      <tr><td>Immutable properties</td><td>Some properties can't be altered: a pipe's <code>COPY</code> body, most stream properties, and a network rule's <code>TYPE</code> and <code>MODE</code>. Changing them means dropping and recreating the object, so plan for that.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Structuring projects</h3>
+  <p>A <em>project folder</em> holds <code>manifest.yml</code> and the definitions. Each <em>target</em> in the manifest maps to one DCM project object, with its own owner role and templating configuration. Snowflake's <a href="https://docs.snowflake.com/en/user-guide/dcm-projects/dcm-projects-enterprise">architecture guidance</a> describes three shapes:</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Shape</th><th>Fits when</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><b>A.</b> One folder, one target</td><td>Most objects share an owner role. Loops generate a modest number of similar resources (Snowflake suggests about 20 iterations as a rule of thumb).</td><td>One template creates the same database structure for each regional team.</td></tr>
+      <tr><td><b>B.</b> One folder, many targets</td><td>Deployments share definitions but need different owner roles, or must deploy and fail independently.</td><td>A platform team with 100+ tenants, one target per tenant. Each target can be deployed in parallel.</td></tr>
+      <tr><td><b>C.</b> Separate folders</td><td>Teams maintain mostly different definitions, with few dependencies between them.</td><td>A platform project provides databases, warehouses, and admin roles. Each domain team's project builds inside them.</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li><b>Keep cross-project dependencies one-directional.</b> DCM orders statements within one deployment but doesn't coordinate across projects. Deploy upstream projects first, and avoid cycles, such as two projects that each reference the other's objects.</li>
+    <li><b>Grants can live in their own project</b> when a different team owns access. The trade-off is that the infrastructure project must deploy first. Without that organizational need, keeping grants next to the objects is simpler.</li>
+  </ul>
+
+  <h3>Environments and developers</h3>
+  <ul>
+    <li><b>Create one DCM project object for each environment.</b> A project has only one deployed instance at a time. Deploying a different configuration to the same project drops anything that configuration doesn't define.</li>
+    <li><b>Template every account-level name</b> (databases, warehouses, roles) so environments, and each developer, get distinct objects. Two projects can't manage the same object, so a developer's deploy fails if another developer's project already owns that name.</li>
+    <li><b>Give each developer or ticket a sandbox:</b> a separate project object plus a unique name variable. Use <code>PLAN DELTA</code> for fast feedback while editing, a full <code>PLAN</code> before any deploy, and <code>PURGE</code> to remove the sandbox afterwards.</li>
+  </ul>
+<pre><code># manifest.yml (excerpt)
+targets:
+  DEV:
+    account_identifier: MYORG-DEV
+    project_name: PLATFORM.DCM.ANALYTICS_DEV
+    project_owner: DCM_DEV_DEPLOYER
+    templating_config: DEV
+  PROD:
+    account_identifier: MYORG-PROD
+    project_name: PLATFORM.DCM.ANALYTICS_PROD
+    project_owner: DCM_PROD_DEPLOYER
+    templating_config: PROD
+
+# a developer sandbox for ticket STORY-1234
+snow dcm create PLATFORM.DCM.ANALYTICS_STORY_1234 --target DEV --if-not-exists
+snow dcm deploy PLATFORM.DCM.ANALYTICS_STORY_1234 --target DEV --variable "db='STORY_1234'"
+
+# remove the sandbox: drop everything it manages, then the project object
+EXECUTE DCM PROJECT PLATFORM.DCM.ANALYTICS_STORY_1234 PURGE;
+DROP DCM PROJECT PLATFORM.DCM.ANALYTICS_STORY_1234;</code></pre>
+
+  <h3>Adopting and handing off objects</h3>
+  <ul>
+    <li><b>Adopt existing objects</b> by adding a <code>DEFINE</code> that matches the object's current state. The project owner role must own the object, directly or through a role it inherits. Then run PLAN until it shows no unintended changes. Add the matching <code>GRANT OWNERSHIP</code> so the definitions and the account agree.</li>
+    <li><b>Transfer ownership safely.</b> If a definition gives a role ownership of an object, also grant that role to the project owner role. PLAN and DEPLOY fail before making changes if the owner role would lose access.</li>
+    <li><b>Hand off without dropping anything.</b> <code>ALTER &lt;object&gt; ... UNSET DCM PROJECT</code> detaches an object, and <code>ALTER DCM PROJECT ... UNMANAGE GRANT</code> stops tracking a grant. In both cases, remove the definition before the next deploy, or the object or grant is picked up again.</li>
+    <li><b>Dropping the project object</b> leaves the managed objects in place but unmanaged, and it deletes the deployment history.</li>
+  </ul>
+
+  <h3>Running it in production</h3>
+  <ul>
+    <li><b>Use separate owner roles for production and non-production.</b> Grant the production deployment role only to service users. Give it just enough privilege to deploy the project, and authenticate it with OIDC from CI.</li>
+    <li><b>Give people visibility without deploy rights.</b> <code>READ</code> on the project shows what it manages (<code>SHOW ENTITIES</code> and <code>SHOW GRANTS IN DCM PROJECT</code>). <code>MONITOR</code> adds the full deployment history and artifacts for auditing and debugging. Only the owner can PLAN or DEPLOY.</li>
+    <li><b>Know where checks stop.</b> PLAN validates that objects can be created. It doesn't run a task's, procedure's, or alert's logic. The sample GitHub workflow's drop check looks only at top-level databases, schemas, tables, and stages, so review the PLAN itself as well.</li>
+    <li><b>Keep secrets out of definitions.</b> Rendered files and deployment history store external stage definitions in plain text. Put credentials in integrations or secrets that are created outside DCM.</li>
+    <li><b>Tooling versions:</b> the documented commands need Snowflake CLI 3.24.0 or later. Reusable GitHub Actions (<code>snowflakedb/snowflake-actions/dcm/*</code>) are in preview. On other CI platforms, call the CLI directly.</li>
+  </ul>
+
+  <div class="two">
+    <div class="card"><h4>Strong fit</h4><p>New projects, platform and environment provisioning, ingestion-layer objects, dynamic-table pipelines, teams that want native plan/deploy with no extra tooling, and teams that like reviewing desired state.</p></div>
+    <div class="card"><h4>Evaluate carefully</h4><p>Frequent breaking table changes, heavy data-fix or backfill work, objects or properties not yet supported, strict "revoke anything undeclared" requirements, and teams already productive with an imperative tool.</p></div>
+  </div>
+      </div>
+      <div class="pager"><a class="pn" href="#approaches">&#8592; Declarative vs imperative</a><a class="pn" href="#schemachange">schemachange &#8594;</a></div>
+    </section>
+    <section id="schemachange" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-tool">Tooling &#183; 05</div>
+        <h2 class="page-title">schemachange</h2>
+        <div class="page-desc"><a href="https://github.com/Snowflake-Labs/schemachange">schemachange</a> is an open-source imperative migration tool built for Snowflake. It's community-maintained under Snowflake Labs and isn't an official Snowflake product. It's lightweight: it runs your scripts in order and records what ran. Because it runs any SQL, it can deploy any object that SQL can manage, and since version 4.3.0 it can also run Snowflake CLI steps for code-backed objects.</div>
+      </div>
+      <div class="card">
+<div class="table-wrap"><table>
+    <thead><tr><th>Script type</th><th>Naming</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td>Versioned</td><td><code>V1.2.0__add_orders.sql</code></td><td>Runs once, in version order.</td></tr>
+      <tr><td>Repeatable</td><td><code>R__vw_orders.sql</code></td><td>Re-runs when its checksum changes. Applied after pending versioned scripts. Good for views, functions, and procedures.</td></tr>
+      <tr><td>Always</td><td><code>A__grants.sql</code></td><td>Runs on every deployment.</td></tr>
+      <tr><td>CLI migration</td><td><code>V1.3.0__deploy_dbt.cli.yml</code></td><td>Runs Snowflake CLI steps (for example <code>snow dbt deploy</code>) as a tracked migration. Works with the V, R, and A prefixes.</td></tr>
+    </tbody>
+  </table></div>
+<pre><code>migrations/
+  V1.0.0__create_raw_schema.sql
+  V1.1.0__orders_add_channel_and_backfill.sql   -- ALTER + UPDATE in one tracked step
+  V1.2.0__deploy_dbt_project.cli.yml
+  R__vw_orders_enriched.sql
+
+# V1.2.0__deploy_dbt_project.cli.yml
+steps:
+  - cli: snow
+    command: dbt
+    args: ["deploy", "my_dbt_project", "--connection", "ci"]
+    working_dir: ./dbt
+    description: "Deploy dbt project object"
+
+# CI
+schemachange deploy --config-folder ./config --dry-run   # on pull request
+schemachange deploy --config-folder ./config             # on merge</code></pre>
+  <ul>
+    <li><b>Change history table</b> (default <code>METADATA.SCHEMACHANGE.CHANGE_HISTORY</code>) records every applied script, with checksums. Use one history table for each environment or subject area.</li>
+    <li><b>Jinja templating</b> for environment-specific names. <code>render</code> shows the final SQL, and <code>verify</code> tests connectivity and config.</li>
+    <li><b>Out-of-order mode</b> (<code>--out-of-order</code>, 4.3.0+) applies pending versioned scripts even when their version is lower than one already applied. This helps when parallel feature branches merge in any order.</li>
+    <li><b>Long histories:</b> schemachange has no built-in "baseline" command. Teams manage growth by structuring scripts per release or user story, using repeatable scripts for logic objects, and starting a new history from a cloned environment at a major cut-over when needed.</li>
+  </ul>
+
+  <h3>CLI migration scripts: SQL and code-backed objects in one tool</h3>
+  <p>Before 4.3.0, a typical pipeline had two steps: schemachange for SQL objects, then a separate Snowflake CLI step for dbt projects, Streamlit apps, or Snowpark code. Coordinating the two was custom work. A <em>CLI migration script</em> puts the CLI step inside the migration sequence, so one run deploys both kinds of object in order and records them in the same history.</p>
+  <ul>
+    <li><b>Naming:</b> use the usual <code>V</code>, <code>R</code>, and <code>A</code> prefixes with a <code>.cli.yml</code> extension, or <code>.cli.yml.jinja</code> for templating. CLI and SQL scripts follow the same ordering and run rules, and can be mixed freely.</li>
+    <li><b>Step fields:</b>
+      <ul>
+        <li><code>cli</code> (required): only <code>snow</code> is supported, and it must be on the <code>PATH</code>.</li>
+        <li><code>command</code> (required): the CLI command, for example <code>dbt</code>, <code>streamlit</code>, <code>snowpark</code>, or <code>sql</code>.</li>
+        <li><code>args</code>: the arguments, each as a separate list item.</li>
+        <li><code>working_dir</code>: resolved relative to the root folder.</li>
+        <li><code>env</code> and <code>description</code>: optional.</li>
+      </ul>
+    </li>
+    <li><b>Tracking:</b> CLI scripts are recorded in the change history table like SQL scripts. The <code>SCRIPT</code> column holds the full file name, including <code>.cli.yml</code>.</li>
+    <li><b>Keep connection details out of the file.</b> Use a Jinja variable or a named connection that CI provides, so the same script works in every environment.</li>
+  </ul>
+<pre><code>migrations/
+  V3.1.1__create_analytics_schema.sql
+  V3.1.2__deploy_dbt_project.cli.yml.jinja
+  V3.1.3__grant_dbt_project_usage.sql
+
+# V3.1.2__deploy_dbt_project.cli.yml.jinja
+steps:
+  - cli: snow
+    command: dbt
+    args:                       # one list item per argument
+      - "deploy"
+      - "my_dbt_project"
+      - "--connection"
+      - "{{ connection_name }}"
+    working_dir: ./dbt
+    description: "Deploy dbt project to {{ environment }}"
+
+# wrong: "--connection {{ connection_name }}" as a single item won't work</code></pre>
+  <div class="callout note"><strong>Versioned or repeatable?</strong> A versioned CLI script runs once, so each new release of a dbt project or app needs a new version file. A repeatable script re-runs only when <em>the YAML file itself</em> changes, not when the code it deploys changes. Many teams use a versioned script per release, or call the CLI step on every deploy from an <code>A__</code> script when redeploying is cheap and safe.</div>
+
+  <h3>Configuration and authentication</h3>
+  <ul>
+    <li><b>Settings come from four places, in this order of precedence:</b> CLI arguments, then environment variables, then <code>schemachange-config.yml</code>, then <code>connections.toml</code>. Keep the YAML file in the repository for project settings, and inject credentials through environment variables in CI.</li>
+    <li><b>Authentication:</b> use key pair (<code>snowflake_jwt</code>) or OAuth for service users. Programmatic access tokens are accepted in place of a password. <code>connections.toml</code> is convenient for local runs.</li>
+    <li><b>Traceability:</b> set <code>--query-tag</code> (for example, the release or commit) so every statement can be found in query history.</li>
+    <li><b>First run:</b> <code>--create-change-history-table</code> creates the history table. The database that will hold it must already exist.</li>
+    <li><b>Shared logic:</b> put Jinja macros in a <code>--modules-folder</code>. Values passed as secrets are filtered from logs.</li>
+  </ul>
+
+  <h3>Writing scripts that fail safely</h3>
+  <ul>
+    <li><b>There are no undo scripts.</b> Fix forward with a new versioned script, and use Time Travel or clones to recover data.</li>
+    <li><b>Failures are recorded.</b> Since 4.3.0, a failed script is logged in the change history with <code>STATUS = 'Failed'</code>. Alert on that status, and check what the script already applied before you run it again.</li>
+    <li><b>DDL commits immediately in Snowflake</b>, so a script with several statements can be left half-applied if it fails. Keep each versioned script to one logical change, and write statements that can be re-run safely (<code>IF NOT EXISTS</code>, <code>CREATE OR ALTER</code>).</li>
+    <li><b>Don't edit a versioned script after it has run.</b> Environments that already applied that version won't run it again. Add a new version instead.</li>
+    <li><b>Keep repeatable and always scripts idempotent and fast.</b> Avoid DML in repeatable scripts unless running it again is harmless.</li>
+  </ul>
+      </div>
+      <div class="pager"><a class="pn" href="#dcm">&#8592; DCM Projects</a><a class="pn" href="#other-tools">Flyway &amp; Liquibase &#8594;</a></div>
+    </section>
+    <section id="other-tools" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-tool">Tooling &#183; 06</div>
+        <h2 class="page-title">Flyway &amp; Liquibase</h2>
+        <div class="page-desc">If your team already runs Flyway or Liquibase well on another database, keeping it on Snowflake is often the lowest-risk choice: same review habits, same pipelines, same skills. Both support Snowflake and offer commercial editions with support. Plan a separate path for code-backed objects (see <a href="#complex">section 9</a>), because these tools run SQL and don't package code.</div>
+      </div>
+      <div class="card">
+  <div class="two">
+    <div class="card"><h4>Flyway (Redgate)</h4><p>SQL migration files named by version: <code>V2__add_orders.sql</code> for versioned and <code>R__vw_orders.sql</code> for repeatable. Applied versions are recorded in <code>flyway_schema_history</code>. <code>baseline</code> starts tracking an existing database, <code>validate</code> checks that applied scripts haven't changed, and placeholders handle environment names. Snowflake support is a separate module (<code>flyway-database-snowflake</code>). Undo scripts and advanced Snowflake features are paid-edition capabilities.</p></div>
+    <div class="card"><h4>Liquibase</h4><p>Changes are <em>changesets</em> in a changelog, written in SQL, YAML, XML, or JSON and identified by <code>author:id</code>. History is stored in <code>DATABASECHANGELOG</code>, with a lock table to prevent concurrent runs. Contexts and labels select changes per environment, <code>update-sql</code> previews the SQL, and changesets can carry their own rollback. Snowflake support is built into the main distribution.</p></div>
+  </div>
+
+  <h3>How they compare with schemachange</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th></th><th>schemachange</th><th>Flyway</th><th>Liquibase</th></tr></thead>
+    <tbody>
+      <tr><td><b>Change format</b></td><td>SQL with Jinja, plus <code>.cli.yml</code> steps for the Snowflake CLI</td><td>SQL (Java migrations also possible), with placeholders</td><td>SQL-formatted or structured (YAML, XML, JSON) changelogs</td></tr>
+      <tr><td><b>History</b></td><td><code>CHANGE_HISTORY</code> table with checksums</td><td><code>flyway_schema_history</code></td><td><code>DATABASECHANGELOG</code> plus a lock table</td></tr>
+      <tr><td><b>Re-runnable logic</b></td><td><code>R__</code> and <code>A__</code> scripts</td><td><code>R__</code> scripts</td><td><code>runOnChange</code> and <code>runAlways</code> changesets</td></tr>
+      <tr><td><b>Rollback</b></td><td>None. Fix forward</td><td>Undo (<code>U__</code>) scripts in paid editions</td><td>Rollback blocks per changeset, rollback to a tag</td></tr>
+      <tr><td><b>Preview</b></td><td><code>--dry-run</code> and <code>render</code></td><td><code>info</code> and <code>validate</code>; SQL dry-run output and drift reports in paid editions</td><td><code>update-sql</code> and <code>status</code></td></tr>
+      <tr><td><b>Existing databases</b></td><td>Start a new history at a cut-over</td><td><code>baseline</code></td><td><code>changelog-sync</code> marks existing changes as applied</td></tr>
+      <tr><td><b>Licensing and support</b></td><td>Open source (Snowflake Labs), community-supported</td><td>Free Community edition; Enterprise edition with Redgate support</td><td>Community (5.0+ under the Functional Source License; earlier versions Apache 2.0); commercial Liquibase Secure</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Using them well on Snowflake</h3>
+  <ul>
+    <li><b>Write Snowflake-specific objects as plain SQL.</b> Generic change types (Liquibase) and comparison features target common relational objects. Dynamic tables, streams, tasks, stages, and policies are clearer, and safer, as SQL migrations.</li>
+    <li><b>Expect partial failures.</b> Snowflake commits DDL immediately, so a failed migration can leave part of its changes applied. Flyway records the failed migration and needs a <code>repair</code> after you fix it. With Liquibase, prefer one statement per changeset so failures are small. A run killed mid-way can leave a stale lock, which you clear with <code>release-locks</code>.</li>
+    <li><b>Keep one history per environment</b> by using a separate schema or database for the history and lock tables in each environment, and give the deployment service user only the privileges it needs.</li>
+    <li><b>Template names per environment</b> with placeholders (Flyway) or changelog properties (Liquibase), and tie each pipeline stage to one environment configuration.</li>
+    <li><b>Handle code-backed objects separately.</b> These tools run SQL. They don't upload files, build packages, or deploy dbt projects or Streamlit apps. Add a Snowflake CLI step in the same pipeline (see <a href="#complex">Code-backed objects</a>).</li>
+    <li><b>Check licensing</b> before standardizing. Some features shown in demos (undo, drift reports, policy checks, advanced Snowflake script generation) require paid editions. Redgate has announced advanced Snowflake capabilities for Flyway Enterprise in preview.</li>
+  </ul>
+      </div>
+      <div class="pager"><a class="pn" href="#schemachange">&#8592; schemachange</a><a class="pn" href="#dbt">dbt on Snowflake &#8594;</a></div>
+    </section>
+    <section id="dbt" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-tool">Tooling &#183; 07</div>
+        <h2 class="page-title">dbt on Snowflake</h2>
+        <div class="page-desc">dbt is the most common transformation layer on Snowflake. The same project can run in several places. For teams on Snowflake, <b>dbt Projects on Snowflake</b> is the recommended option because it runs dbt natively, with no extra infrastructure, and puts dbt runs, lineage and permissions in the same platform as the data.</div>
+      </div>
+      <div class="card">
+  <h3>Deployment options</h3>
+  <div class="grid">
+    <div class="card"><h4>dbt Projects on Snowflake <span class="tag ga">Recommended</span></h4><p>A <code>DBT PROJECT</code> object in a schema. Snowflake provides the runtime, so you choose the dbt version with <code>DBT_VERSION</code> (dbt Core 1.x or Fusion 2.x), develop in Workspaces, Cortex Code Desktop or a local IDE, and schedule with Tasks.</p></div>
+    <div class="card"><h4>dbt Core, self-hosted</h4><p>The open-source CLI (dbt v1, Apache 2.0) run on infrastructure you manage, such as a container, VM, CI runner, or an Airflow worker. It sends SQL to Snowflake.</p></div>
+    <div class="card"><h4>dbt Fusion engine</h4><p>dbt Labs' Rust-based engine behind dbt v2, with faster parsing and compilation and built-in SQL analysis. It's an <em>engine</em>, not a hosting option: you can run it inside dbt Projects on Snowflake, locally, self-hosted, or on dbt platform.</p></div>
+    <div class="card"><h4>dbt platform (formerly dbt Cloud)</h4><p>dbt Labs' hosted SaaS product: browser IDE, job scheduler, CI jobs, and metadata and semantic-layer services, under a separate dbt Labs subscription. It runs dbt on dbt Labs infrastructure against Snowflake.</p></div>
+  </div>
+
+  <h3>Comparison matrix</h3>
+  <div class="table-wrap"><table class="matrix">
+    <thead><tr><th></th><th class="rec">dbt Projects on Snowflake</th><th>dbt Core (self-hosted)</th><th>dbt Fusion engine</th><th>dbt platform</th></tr></thead>
+    <tbody>
+      <tr><td><b>Where dbt runs</b></td><td class="rec">Inside Snowflake, using the warehouse in your target</td><td>Your infrastructure (container, VM, CI runner, Airflow)</td><td>Wherever you install it: Snowflake, local, self-hosted, or dbt platform</td><td>dbt Labs' hosted infrastructure</td></tr>
+      <tr><td><b>Engine and versions</b></td><td class="rec">Pin per project with <code>DBT_VERSION</code> (Core 1.9 to 1.12, Fusion 2.x), set an account default with <code>DEFAULT_DBT_VERSION</code>, or override per run</td><td>Whatever version you install. You manage upgrades and drift across machines</td><td>dbt v2 (Rust). Some packages aren't Fusion-compatible yet, so check before switching</td><td>Version tracks managed by dbt Labs, including Fusion</td></tr>
+      <tr><td><b>Development</b></td><td class="rec">Workspaces (browser, Git-integrated), Cortex Code Desktop, or a local IDE with the Snowflake CLI</td><td>Local IDE and CLI</td><td>Local IDE with the dbt VS Code extension, or any of the hosts above</td><td>Browser IDE (Studio), or a local CLI connected to the platform</td></tr>
+      <tr><td><b>Scheduling</b></td><td class="rec">Snowflake Tasks and task graphs (<code>EXECUTE DBT PROJECT</code>), or triggered by an external orchestrator</td><td>External orchestrator you run (Airflow, Dagster, cron, CI)</td><td>Depends on where it runs</td><td>Built-in job scheduler, or triggered by API</td></tr>
+      <tr><td><b>CI/CD</b></td><td class="rec">Snowflake CLI in any CI platform: <code>snow dbt deploy</code>, Slim CI with <code>--state</code> and <code>--defer</code>, OIDC authentication</td><td>Build it yourself in your CI platform</td><td>Same as its host</td><td>Built-in CI jobs on pull requests</td></tr>
+      <tr><td><b>Credentials</b></td><td class="rec">No external credentials. Runs as the calling role, with secrets stored in Snowflake</td><td>Key pair, OAuth, or WIF credentials stored on your infrastructure</td><td>Same as its host</td><td>Snowflake credentials stored in dbt platform</td></tr>
+      <tr><td><b>Lineage and monitoring</b></td><td class="rec">DAG in Snowsight, column-level lineage through Horizon Catalog, run history, and logs and traces in the event table</td><td>Artifacts on your infrastructure. Lineage and monitoring tools are yours to set up</td><td>Same as its host</td><td>dbt Catalog and run history in dbt platform</td></tr>
+      <tr><td><b>Packages</b></td><td class="rec">Full <code>dbt deps</code> support through an external access integration, or vendor <code>dbt_packages/</code> in CI. Private Git packages use Snowflake secrets</td><td>Full support</td><td>Fusion-compatible packages only</td><td>Full support</td></tr>
+      <tr><td><b>Cost and licensing</b></td><td class="rec">Snowflake warehouse compute only. Fusion included with no extra license. The optional dbt State service is billed by dbt Labs</td><td>Free (Apache 2.0) plus your infrastructure and run costs</td><td>Free to use under the dbt Labs product license. An Apache 2.0 <code>dbt-oss</code> distribution is available if policy requires it</td><td>dbt Labs subscription plus Snowflake compute</td></tr>
+      <tr><td><b>Operational overhead</b></td><td class="rec">Lowest: no Python environment, runners, or orchestrator to maintain</td><td>Highest: runtime, versions, secrets, and orchestration are all yours</td><td>Same as its host</td><td>Low on the dbt side, plus a second vendor to manage</td></tr>
+      <tr><td><b>Best fit</b></td><td class="rec">Most teams on Snowflake, including new projects and teams moving off self-hosted Core</td><td>Teams with a mature self-hosted platform, or dbt jobs that span several warehouses</td><td>Very large projects (thousands of models) or teams that want faster parse and compile. Use it inside dbt Projects on Snowflake</td><td>Organizations that standardize on dbt Labs' platform across several data platforms</td></tr>
+    </tbody>
+  </table></div>
+  <p class="small-note">Supported versions change often. Run <code>SELECT SYSTEM$SUPPORTED_DBT_VERSIONS();</code> and see <a href="https://docs.snowflake.com/en/user-guide/data-engineering/dbt-projects-on-snowflake-dbt-core-versions">supported dbt versions</a>. For dbt v2 distributions and licensing, see <a href="https://docs.getdbt.com/docs/dbt-licensing">dbt Labs' licensing page</a>.</p>
+
+  <h3>Why dbt Projects on Snowflake is the default recommendation</h3>
+  <ul>
+    <li><b>No infrastructure to run.</b> No Python environment, runners, or orchestrator cluster, and no version drift across developer machines.</li>
+    <li><b>Governed by Snowflake RBAC.</b> Runs use the calling role and the profile role, so the run can do only what <em>both</em> roles are allowed to do. <code>MONITOR</code> on the project lets engineers see runs, artifacts, and lineage without granting access to the data.</li>
+    <li><b>Observability in one place.</b> The DAG, column-level lineage, query history, logs, and traces sit next to the data they describe.</li>
+    <li><b>Same code, more than one host.</b> Projects stay standard dbt. A <code>dbt_projects_profiles.yml</code> file is read only by Snowflake, so local developers keep their own <code>~/.dbt/profiles.yml</code> on the same repository.</li>
+  </ul>
+
+  <h3>Typical workflow</h3>
+<pre><code># CI on pull request: deploy a test object, then build only what changed
+snow dbt deploy my_project_ci --no-auto-compile
+# import the last production run's artifacts, then run:
+#   build --select state:modified+ --defer --state &lt;imported state&gt;
+# (see Snowflake's Slim CI tutorial for the exact import step)
+
+# CD on merge: update the production object
+snow dbt deploy my_project --default-target prod</code></pre>
+<pre><code>-- Pin the engine, then schedule with a task on a user-managed warehouse
+ALTER DBT PROJECT analytics.dbt.my_project SET DBT_VERSION = '1.12.3';
+
+CREATE OR ALTER TASK analytics.dbt.run_daily
+  WAREHOUSE = transform_wh          -- serverless tasks can't run dbt projects
+  SCHEDULE  = 'USING CRON 0 5 * * * UTC'
+AS
+  EXECUTE DBT PROJECT analytics.dbt.my_project ARGS = 'build --target prod';</code></pre>
+
+  <h3>Choosing an engine</h3>
+  <ul>
+    <li><b>Start with the latest supported dbt Core 1.x</b>. Snowflake recommends this for most teams because it has the broadest support for Snowflake materializations and packages.</li>
+    <li><b>Consider Fusion</b> for very large projects (Snowflake's guidance mentions more than 5,000 models), or to get faster parse and compile. Check package compatibility first, and use dbt Labs' <code>dbt-autofix</code> to clear deprecations before switching. Fusion can be tried per project, or for a single run, without changing the account default.</li>
+  </ul>
+
+  <h3>Moving from other deployments</h3>
+  <ul>
+    <li><b>From self-hosted dbt Core:</b> add <code>dbt_projects_profiles.yml</code>, deploy with the Snowflake CLI, move schedules to Tasks or have your orchestrator call <code>EXECUTE DBT PROJECT</code>, and retire the runners.</li>
+    <li><b>From dbt platform:</b> the dbt code moves over, but the platform's own features don't. Replace its scheduler, CI jobs, environment variables, and metadata services with Tasks, CI with the Snowflake CLI, <code>env.yml</code>, and Snowsight lineage. Snowflake's docs note that dbt Cloud projects as such aren't supported, so the project must work on a supported dbt Core or Fusion version.</li>
+    <li><b>Hybrid is fine during a transition.</b> Some teams keep developing locally or in dbt platform and deploy the same repository to a <code>DBT PROJECT</code> object, which makes metadata and lineage visible in Snowflake. Make sure only one system <em>schedules</em> production runs.</li>
+  </ul>
+
+  <h3>Practices that apply to every deployment</h3>
+<ul>
+    <li><b>dbt manages transformation objects itself.</b> Models create their own tables and views, so don't also define them in DCM or migration scripts. Change-management tools own what dbt doesn't: raw and landing tables, stages, file formats, ingestion tasks, and grants.</li>
+    <li><b>Replication and ingestion tools behave the same way.</b> Partner replication tools typically create their target tables, run the initial and incremental loads, and handle source schema changes. Leave those landing tables to the tool, and don't also define them in DCM or migration scripts. Your change tool still owns the database, schema, and grants around them.</li>
+    <li><b>Don't stretch dbt into a change-management tool.</b> Managing procedures, tasks, stages, or grants through hooks and macros is possible, but it's fragile and hard to review. Pair dbt with a change tool instead.</li>
+    <li><b>Deploy production through CI/CD.</b> Deploying from Workspaces or a Git stage is fine for development objects. Production objects should change only through a reviewed pipeline.</li>
+    <li><b>Keep warehouses aligned.</b> Use the same warehouse in the task and the profile target so a run doesn't wake two warehouses.</li>
+    <li><b>Scheduling.</b> Use tags and selectors to run subsets of the graph on different cadences, such as hourly or daily. For event-driven runs, trigger a task from a stream with <code>WHEN SYSTEM$STREAM_HAS_DATA(...)</code>, or chain the run after ingestion in a task graph.</li>
+    <li><b>Python models</b> run in Snowflake through Snowpark. Use them for DataFrame-style logic that would otherwise sit in containers outside the platform.</li>
+    <li><b>Schema changes dbt can't express</b>, such as reordering or retyping columns on large incremental models, need a coordinated step. Typically that's a migration script or a full refresh.</li>
+  </ul>
+      </div>
+      <div class="pager"><a class="pn" href="#other-tools">&#8592; Flyway &amp; Liquibase</a><a class="pn" href="#terraform">Terraform &#8594;</a></div>
+    </section>
+    <section id="terraform" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-tool">Tooling &#183; 08</div>
+        <h2 class="page-title">Terraform</h2>
+        <div class="page-desc">The <a href="https://docs.snowflake.com/en/user-guide/terraform">Snowflake Terraform provider</a> is maintained by Snowflake and covers a large share of objects. It fits best where Snowflake objects connect to cloud resources Terraform already manages (storage and API integrations, PrivateLink-related configuration), and for account-level environment setup.</div>
+      </div>
+      <div class="card">
+<ul>
+    <li><b>Use it where the team already uses Terraform.</b> Adopting it only for Snowflake brings state files, locking backends, and HCL that teams new to it often struggle with.</li>
+    <li><b>Draw a clear boundary.</b> Example: Terraform owns integrations, network objects, and environment containers, and the data team's tool owns everything inside the databases. Snowflake's docs advise that each object be managed by only one tool.</li>
+    <li><b>Be careful with tables.</b> Some resource changes are applied as destroy-and-recreate, which loses the data and history in a table. Prefer to leave data-bearing tables to DCM or an imperative tool. If Terraform does manage tables, review every plan for replacements (<code>-/+</code>) on them, and check whether the resource is a <a href="https://docs.snowflake.com/en/user-guide/terraform">preview feature</a> in your provider version. Preview resources are disabled by default and aren't officially supported.</li>
+    <li><b>Integrations are a two-way handshake.</b> A storage, API, or notification integration needs values from the cloud provider (such as a role ARN), and the cloud side then needs values Snowflake generates (such as an IAM user or external ID). Terraform can manage both sides in one plan, which is why it fits this layer well.</li>
+    <li><b>Privileged setup steps.</b> Some account-level configuration needs <code>ACCOUNTADMIN</code>. If a Terraform service user needs it, grant it only for that step through a controlled runbook, then revoke it.</li>
+  </ul>
+
+  <h3>A typical scope</h3>
+  <div class="two">
+    <div class="card"><h4>Good fit for Terraform</h4><p>Storage, API, and notification integrations with their cloud-side IAM; network rules and policies; warehouses and resource monitors; environment databases; account roles and the role hierarchy; service users; and grants at the database and warehouse level.</p></div>
+    <div class="card"><h4>Usually better elsewhere</h4><p>Tables and their columns, views, dynamic tables, tasks, procedures, and anything dbt builds. These change often, carry data, or need migration logic. Leave them to DCM, an imperative tool, or dbt.</p></div>
+  </div>
+<pre><code>terraform {
+  required_providers {
+    snowflake = {
+      source  = "snowflakedb/snowflake"
+      version = "= 2.x.y"            # pin exactly, upgrade deliberately
+    }
+  }
+  backend "s3" {}                    # remote state with locking
+}
+
+resource "snowflake_database" "raw" {
+  name = "RAW_${upper(var.env)}"
+  lifecycle {
+    prevent_destroy = true           # stop a plan from deleting a data-bearing container
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "loader_raw" {
+  account_role_name = "${upper(var.env)}_LOADER"
+  privileges        = ["USAGE", "CREATE SCHEMA"]
+  on_account_object {
+    object_type = "DATABASE"
+    object_name = snowflake_database.raw.name
+  }
+}</code></pre>
+
+  <h3>Operating it</h3>
+  <ul>
+    <li><b>Pin the provider version and upgrade on purpose.</b> Snowflake officially supports only the latest provider version, and minor releases can occasionally change behavior. Read the provider's migration guide before each upgrade, and test it in a non-production workspace first.</li>
+    <li><b>Treat state as sensitive.</b> Use a remote backend with locking and encryption, limit who can read it, and never commit state or credentials to the repository. Authenticate the service user with key pair or OAuth, not passwords in variables.</li>
+    <li><b>Use one workspace or state file per environment</b> (or per account) so a mistake in one plan can't touch another environment.</li>
+    <li><b>Separate privileges with provider aliases.</b> For example, one provider configuration for roles and grants, and another for warehouses and databases. Neither should use <code>ACCOUNTADMIN</code> for routine runs.</li>
+    <li><b>Import before you manage.</b> Bring existing objects under Terraform with <code>import</code> blocks, then confirm the plan shows no changes before merging.</li>
+    <li><b>Detect drift.</b> Run a scheduled <code>terraform plan -detailed-exitcode</code>, which exits with code 2 when changes are pending, and alert on it. Changes made by hand show up as diffs, and the next apply reverts them.</li>
+    <li><b>Don't manage the same grant from two tools.</b> If Terraform and DCM (or scripts) both manage a grant, one tool can revoke what the other expects, and plans keep showing changes. Pick one owner for each grant scope.</li>
+  </ul>
+      </div>
+      <div class="pager"><a class="pn" href="#dbt">&#8592; dbt on Snowflake</a><a class="pn" href="#complex">Code-backed objects &#8594;</a></div>
+    </section>
+    <section id="complex" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-tool">Tooling &#183; 09</div>
+        <h2 class="page-title">Code-backed objects</h2>
+        <div class="page-desc">Some Snowflake objects are defined by <em>files</em>, not only by a DDL statement. They're sometimes called <em>complex</em> or <em>application</em> objects: dbt Projects, notebooks, Streamlit apps, Snowpark code with packages, Snowpark Container Services images, and code bundles. Their DDL contains a pointer (<code>FROM '@stage/...'</code>), not the logic. Deploying them takes three steps:</div>
+      </div>
+      <div class="card">
+<div class="flow">
+    <div class="step"><b>1. Build</b>Resolve dependencies (<code>dbt deps</code>), package wheels, build images, render config.</div>
+    <div class="step"><b>2. Stage</b>Upload the artifacts to a Snowflake stage or image repository.</div>
+    <div class="step"><b>3. Create / alter</b>Run the DDL that points at the staged files. Snowflake keeps a versioned copy.</div>
+  </div>
+  <p>The <a href="https://docs.snowflake.com/en/developer-guide/snowflake-cli/index">Snowflake CLI</a> (<code>snow</code>) handles these steps for most object types, for example <code>snow dbt deploy</code> and <code>snow streamlit deploy</code>. Call it directly from CI, from a schemachange <code>.cli.yml</code> migration, or let DCM manage the object types it supports. Use <code>snow</code>, not the older SnowSQL client.</p>
+
+  <div class="callout"><strong>When you can skip build and stage.</strong> If nothing needs preparing (no compile, no <code>dbt deps</code>, no generated config), an object can be created straight from a connected Git repository in Snowflake with an ordinary SQL migration. Pin it to a tag such as <code>@my_git_repo/tags/v2.0.0/</code>, not a branch, so every environment deploys exactly the same code.</div>
+
+  <h3>Where each object type is deployed from</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Object</th><th>Snowflake CLI</th><th>Also possible</th></tr></thead>
+    <tbody>
+      <tr><td>dbt project</td><td><code>snow dbt deploy</code></td><td>Workspaces (for development objects)</td></tr>
+      <tr><td>Streamlit app</td><td><code>snow streamlit deploy</code></td><td>DCM <code>DEFINE STREAMLIT</code> with a project asset (preview)</td></tr>
+      <tr><td>Snowpark functions and procedures</td><td><code>snow snowpark build</code>, then <code>snow snowpark deploy</code></td><td>DCM or SQL scripts, with handler files staged separately</td></tr>
+      <tr><td>Notebooks</td><td>Notebook entity in <code>snowflake.yml</code></td><td>Code bundles through DCM (preview), for scheduled notebooks and Python jobs</td></tr>
+      <tr><td>Container services</td><td><code>snow spcs</code> commands for image repositories, compute pools, and services</td><td>Image build and push from your CI platform</td></tr>
+      <tr><td>Native apps</td><td><code>snow app</code> commands</td><td>Not applicable</td></tr>
+    </tbody>
+  </table></div>
+<pre><code># snowflake.yml: a project definition the CLI deploys from
+definition_version: 2
+entities:
+  hello_procedure:
+    type: procedure
+    stage: deploy_stage
+    artifacts: ["app/"]
+    handler: procedures.hello
+    signature:
+      - name: name
+        type: string
+    returns: string</code></pre>
+  <ul>
+    <li><b>Keep the project directory clean.</b> The CLI processes files in the project directory and can upload them, so don't keep credentials or <code>.env</code> files there.</li>
+    <li><b>Run plain SQL steps with templating.</b> Use <code>snow sql -f script.sql --enable-templating JINJA --variable "env='PROD'"</code> for post-deployment steps, such as SQL that a declarative tool doesn't manage. Remember these steps have no history of their own, so make them idempotent.</li>
+    <li><b>Pin the CLI version in CI</b> and authenticate with OIDC or key pair. Features such as DCM commands need a minimum CLI version.</li>
+  </ul>
+      </div>
+      <div class="pager"><a class="pn" href="#terraform">&#8592; Terraform</a><a class="pn" href="#cicd">CI/CD pipeline &#8594;</a></div>
+    </section>
+    <section id="cicd" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-deliv">Delivery &#183; 10</div>
+        <h2 class="page-title">CI/CD pipeline</h2>
+        
+      </div>
+      <div class="card">
+<h3>Stages</h3>
+  <div class="flow">
+    <div class="step"><b>Pull request</b>Lint, unit-test, then <em>plan</em> or dry-run against the target environment. Post the output for reviewers.</div>
+    <div class="step"><b>Merge to main</b>Deploy to dev/test with that environment's service user. Run dbt build and tests.</div>
+    <div class="step"><b>Release</b>Promote the <em>same commit</em> to production after approval. Only configuration changes between environments.</div>
+    <div class="step"><b>Verify</b>Run smoke tests, data quality expectations, and row-count and key checks. Alert on failure.</div>
+  </div>
+  <h3>Order within a deployment</h3>
+  <ol>
+    <li>Object state (DCM deploy or migration scripts): schemas, raw tables, stages, grants.</li>
+    <li>Code-backed objects (Snowflake CLI): dbt project, procedures, apps.</li>
+    <li>Transformation run or refresh (dbt build, dynamic table refresh) where required.</li>
+    <li>Post-deploy validation.</li>
+  </ol>
+  <h3>Practices that matter</h3>
+  <ul>
+    <li><b>Authentication:</b> workload identity federation (OIDC) from your CI platform, or key-pair auth, with a separate service user and role for each environment. No long-lived passwords. Snowflake publishes CLI integrations for GitHub Actions (GA), GitLab CI/CD, and Azure DevOps (preview).</li>
+    <li><b>Branching:</b> trunk-based development with short-lived feature branches, plus release branches or tags that gate production on a regular cadence. Data pipelines rarely suit true continuous deployment because integration tests against real data take time.</li>
+    <li><b>Environments:</b> seed dev and test with <b>zero-copy clones</b> of production instead of replaying DDL. Rebuilding from scripts gives you empty tables.</li>
+    <li><b>Serialize deployments</b> to each environment so two pipelines can't apply changes at the same time.</li>
+    <li><b>Breaking changes:</b> use expand, then migrate, then contract: add the new column or table, backfill, switch consumers, and drop the old one in a later release.</li>
+  </ul>
+<pre><code># GitHub Actions sketch (one job per environment)
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: snowflakedb/snowflake-cli-action@v2   # OIDC auth configured per docs
+      - run: snow dcm plan --target DEV            # or: schemachange deploy --dry-run
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    environment: prod                             # approval gate
+    steps:
+      - run: snow dcm deploy --target PROD        # or: schemachange deploy
+      - run: snow dbt execute -c prod my_dbt_project build</code></pre>
+      </div>
+      <div class="pager"><a class="pn" href="#complex">&#8592; Code-backed objects</a><a class="pn" href="#rbac">Access &amp; RBAC &#8594;</a></div>
+    </section>
+    <section id="rbac" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-deliv">Delivery &#183; 11</div>
+        <h2 class="page-title">Access &amp; RBAC</h2>
+        
+      </div>
+      <div class="card">
+<ul>
+    <li><b>SCIM handles who; Snowflake grants handle what.</b> With Okta or Entra ID SCIM, the identity provider creates users and roles that match groups, pushed one way from the IdP. Those roles start with no privileges. You manage role hierarchy and grants inside Snowflake, in code. Don't hand-edit or drop SCIM-owned users and roles in Snowflake, because it breaks the sync.</li>
+    <li><b>Scope what SCIM pushes.</b> Sync only the groups meant for Snowflake, for example from a dedicated group or organizational unit, not the whole directory. Long-lived directories carry many groups that shouldn't become Snowflake roles.</li>
+    <li><b>Keep grants in code.</b> Options include DCM <code>GRANT</code> statements, migration scripts (often repeatable or always scripts), Terraform owned by the platform team, or a dedicated permissions tool. Reliably revoking privileges that were granted outside the tool is still a gap in most tooling. If you need it, schedule a check that compares <code>SHOW GRANTS</code> with the declared model.</li>
+    <li><b>Declare permissions above the level of single GRANTs.</b> Written one at a time, grants spread across many files at one-role, one-privilege, one-object granularity, which makes them hard to audit. Two patterns help:
+      <ul>
+        <li><b>Rules-based definition:</b> describe access at a higher level (for example, "role X reads everything in schema Y") in a YAML or JSON file, and use a tool or script to expand it into <code>GRANT</code> and <code>REVOKE</code> statements. <a href="#permifrost">Permifrost</a> is a concrete open-source option for this pattern (see below).</li>
+        <li><b>Permission matrix:</b> keep a role-by-object privilege matrix under version control, load it into a Snowflake table in the pipeline, and run a stored procedure that applies it. The procedure can also revoke privileges that aren't in the matrix, which closes the revoke gap above.</li>
+      </ul>
+    </li>
+    <li><b>Functional and access roles.</b> Grant object privileges to access roles (database roles work well), grant access roles to functional or persona roles, and give users only functional roles. Use a dedicated owner role for each environment so ownership doesn't drift to individuals.</li>
+    <li><b>Secondary roles.</b> New users default to <code>DEFAULT_SECONDARY_ROLES = ('ALL')</code>. If you want users to switch roles explicitly (for example, people who work across separate legal entities), block secondary roles with a session policy (<code>ALLOWED_SECONDARY_ROLES = ()</code>) at the account or user level, or set the user property to <code>()</code>. <code>CREATE</code> statements are always authorized by the <em>primary</em> role only. <a href="https://community.snowflake.com/s/article/default-secondary-roles-all-overview-and-additional-explanations">Reference</a>.</li>
+  </ul>
+<pre><code>CREATE SESSION POLICY governance.policies.no_secondary_roles
+  ALLOWED_SECONDARY_ROLES = ();
+ALTER ACCOUNT SET SESSION POLICY governance.policies.no_secondary_roles;</code></pre>
+
+  <h3 id="permifrost">Permifrost: permissions as code</h3>
+  <p><a href="https://gitlab.com/gitlab-data/permifrost">Permifrost</a> is an open-source Python tool, maintained by the GitLab Data Team, that manages Snowflake permissions declaratively through a YAML spec file. It compares the spec to the current account state and generates (or executes) the <code>GRANT</code> and <code>REVOKE</code> commands needed to converge. Because the spec is the single source of truth, any privilege not declared in it is revoked&mdash;which closes the revoke gap described above.</p>
+  <div class="two">
+    <div class="card"><h4>Strengths</h4>
+      <ul>
+        <li>Declarative: one YAML file defines the entire permission model, version-controlled in Git.</li>
+        <li>Revokes undeclared grants automatically, preventing privilege creep.</li>
+        <li><code>--dry</code> mode generates SQL for review without applying it, fitting naturally into a PR-based workflow.</li>
+        <li>Abstracts Snowflake grants into <code>read</code>/<code>write</code>, reducing boilerplate.</li>
+        <li>Supports key-pair, OAuth, and external-browser authentication.</li>
+        <li>Spec files support <code>!include</code> for splitting large configurations by team or domain.</li>
+      </ul>
+    </div>
+    <div class="card"><h4>Trade-offs</h4>
+      <ul>
+        <li>Community-maintained (v0.15.x), not an official Snowflake product.</li>
+        <li>Requires the <code>SECURITYADMIN</code> role; fails with any other role.</li>
+        <li>Covers roles, users, warehouses, integrations, and database/schema/table grants only. Dynamic tables, tasks, stages, policies, and other object types are out of scope.</li>
+        <li>The <code>read</code>/<code>write</code> abstraction doesn't map to every Snowflake privilege (for example, <code>CREATE DYNAMIC TABLE</code> or policy grants).</li>
+        <li>Does not revoke object ownership or warehouse privileges.</li>
+        <li>All entity names in the spec must be lowercase.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h4>Example spec</h4>
+<pre><code># permifrost.yml
+databases:
+  - analytics:
+      shared: false
+  - raw:
+      shared: false
+
+roles:
+  - analyst_role:
+      warehouses:
+        - query_wh
+      member_of:
+        - sysadmin
+      privileges:
+        databases:
+          read:
+            - analytics
+            - raw
+        schemas:
+          read:
+            - analytics.*
+            - raw.*
+        tables:
+          read:
+            - analytics.*.*
+            - raw.ingest.*
+
+  - loader_role:
+      warehouses:
+        - load_wh
+      privileges:
+        databases:
+          read:
+            - raw
+          write:
+            - raw
+        schemas:
+          read:
+            - raw.*
+          write:
+            - raw.ingest
+        tables:
+          write:
+            - raw.ingest.*
+
+users:
+  - analyst_user:
+      can_login: true
+      member_of:
+        - analyst_role
+  - loader_svc:
+      can_login: true
+      member_of:
+        - loader_role
+
+warehouses:
+  - query_wh:
+      size: x-small
+  - load_wh:
+      size: small</code></pre>
+
+  <h4>Running in CI</h4>
+<pre><code># Pull request: preview changes
+permifrost run permifrost.yml --dry
+
+# Merge to main: apply
+permifrost run permifrost.yml</code></pre>
+  <div class="callout"><strong>Pair it with your change tool.</strong> Permifrost owns grants and role memberships. It does not create databases, schemas, or tables. Use DCM Projects, schemachange, Terraform, or another tool to manage the objects themselves, and Permifrost to manage who can access them. As with any tool combination, make sure grant ownership doesn't overlap: if DCM or Terraform also manages grants, choose one owner per grant scope.</div>
+      </div>
+      <div class="pager"><a class="pn" href="#cicd">&#8592; CI/CD pipeline</a><a class="pn" href="#accounts">Account strategy &#8594;</a></div>
+    </section>
+    <section id="accounts" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-deliv">Delivery &#183; 12</div>
+        <h2 class="page-title">Account strategy</h2>
+        
+      </div>
+      <div class="card">
+<div class="two">
+    <div class="card"><h4>Start with one account</h4><p>Snowflake accounts scale well, and warehouses and databases are isolated from each other. A single account with dev, test, and prod databases plus RBAC is simplest. Zero-copy cloning to refresh pre-production only works <em>within</em> an account.</p></div>
+    <div class="card"><h4>Use multiple accounts for real boundaries</h4><p>Separate legal entities, regulatory isolation, distinct security postures, or data residency. Put each entity's environments inside its own account so cloning still works, and use read-only data sharing for cross-entity access.</p></div>
+  </div>
+  <h3>Environments in one account vs separate accounts</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th></th><th>Many environments per account</th><th>One environment per account</th></tr></thead>
+    <tbody>
+      <tr><td><b>Seeding</b></td><td><code>CREATE DATABASE ... CLONE</code> copies objects and data in one fast step.</td><td>No cross-account cloning. Share data from production and copy it with <code>CREATE TABLE ... AS SELECT</code>, and deploy all other objects with your change tool. Slower, and it needs automation.</td></tr>
+      <tr><td><b>Release and behavior-change testing</b></td><td>Every environment gets new releases at the same time.</td><td>A pre-production Enterprise (or higher) account can be <a href="https://docs.snowflake.com/en/user-guide/intro-releases">designated for early access</a> to new releases (typically at least 48 hours ahead). Behavior-change bundles can be enabled there first.</td></tr>
+      <tr><td><b>Object naming</b></td><td>Account-level objects need an environment prefix or suffix, and tools must parameterize names.</td><td>Names can match across environments. Tools still need per-environment targets.</td></tr>
+      <tr><td><b>Account settings</b></td><td>Shared by all environments.</td><td>Can differ by environment.</td></tr>
+      <tr><td><b>Metadata and auditing</b></td><td>One <code>ACCOUNT_USAGE</code> view of everything.</td><td>Split across accounts. Organization-level views give a consolidated cost and usage summary.</td></tr>
+      <tr><td><b>Cost</b></td><td>One edition and credit price for all environments.</td><td>Pre-production can run on a different edition. Check sharing restrictions between Business Critical and lower editions first.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Creating a new environment</h3>
+  <div class="flow">
+    <div class="step"><b>1. Build</b>Create the container: a cloned database in the same account, or a new account.</div>
+    <div class="step"><b>2. Seed</b>Clone from production, or share plus CTAS across accounts. Deploy account-level and non-table objects with your change tool.</div>
+    <div class="step"><b>3. Protect</b>Remove or mask sensitive data according to your security policies, and apply policies to every object.</div>
+    <div class="step"><b>4. Grant</b>Grant access to the team's roles, then start using it.</div>
+  </div>
+  <div class="callout warn"><strong>Clones keep their references.</strong> Views, procedures, functions, and tasks inside a clone can still point at objects outside it, including production, if they use fully qualified names. Use environment variables or templating in definitions, and redeploy those objects with your change tool after cloning.</div>
+  <ul>
+    <li>With multiple accounts, every account needs its own network setup (for example PrivateLink), SCIM integration, roles, and policies. Manage these from one codebase with per-account targets so they stay in sync.</li>
+    <li>Shared data is read-only for consumers. Changes happen in the source account and flow through the share.</li>
+    <li>Plan replication and failover to a second region early if business continuity is a requirement.</li>
+    <li>Fix naming conventions before the first object is created. For example: <code>&lt;DOMAIN&gt;_&lt;ENV&gt;</code> databases with medallion or layer schemas, and environment-suffixed roles and warehouses.</li>
+  </ul>
+      </div>
+      <div class="pager"><a class="pn" href="#rbac">&#8592; Access &amp; RBAC</a><a class="pn" href="#decision">Decision matrix &#8594;</a></div>
+    </section>
+    <section id="decision" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-guide">Guidance &#183; 13</div>
+        <h2 class="page-title">Decision matrix</h2>
+        
+      </div>
+      <div class="card">
+<div class="table-wrap"><table>
+    <thead><tr><th>Your situation</th><th>A sensible starting combination</th></tr></thead>
+    <tbody>
+      <tr><td>New to change management on Snowflake, mostly supported objects, wants native tooling</td><td>DCM Projects + dbt Projects + Snowflake Tasks. Add a tracked script path for data fixes.</td></tr>
+      <tr><td>Frequent breaking table changes, backfills, or renames; engineering-heavy team</td><td>schemachange (with <code>.cli.yml</code> for code-backed objects) + dbt.</td></tr>
+      <tr><td>Already proficient with Flyway or Liquibase</td><td>Keep it for database objects + dbt + Snowflake CLI for code-backed objects.</td></tr>
+      <tr><td>Infra team already runs Terraform for the cloud</td><td>Terraform for integrations, network, and environment containers. DCM or an imperative tool inside databases.</td></tr>
+      <tr><td>Many project teams with different skill levels</td><td>Central platform team provisions environments. Publish a paved-road template (repo, pipeline, dbt skeleton). Teams publish data products through internal listings.</td></tr>
+      <tr><td>Mostly dynamic tables and simple pipelines; less engineering capacity</td><td>DCM Projects managing dynamic tables, tasks, and data quality expectations end to end.</td></tr>
+      <tr><td>Need to enforce "no undeclared privileges" and manage grants separately from objects</td><td><a href="#permifrost">Permifrost</a> for grants + any change tool for objects. Pair with SCIM for identity.</td></tr>
+    </tbody>
+  </table></div>
+      </div>
+      <div class="pager"><a class="pn" href="#accounts">&#8592; Account strategy</a><a class="pn" href="#patterns">Field patterns &#8594;</a></div>
+    </section>
+    <section id="patterns" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-guide">Guidance &#183; 14</div>
+        <h2 class="page-title">Field patterns</h2>
+        <div class="page-desc">Two anonymized examples of how customer teams applied these ideas.</div>
+      </div>
+      <div class="card">
+<h3>Pattern A: Greenfield data-product team</h3>
+  <div class="card">
+    <p><b>Context:</b> A central platform team provisions a "project container" for each product team: dev, test, and prod databases, medallion schemas, roles, and warehouses, defined in Terraform. One team of about five developers is building an AI-assisted master-data product with Cortex functions and agents.</p>
+    <p><b>Journey:</b> They started with native declarative definitions for ingestion objects and dbt for transformations. As the product changed quickly, they hit frequent breaking table changes and data fixes, and their objects ended up split across three tools with no clear owner. They proved out converting their definitions to versioned migration scripts.</p>
+    <p><b>Decisions:</b> Terraform stays at the platform layer. Inside each project they use one imperative tool for object state (with CLI steps for containers and apps), dbt for transformation, native Tasks for orchestration, GitLab CI for deployment, and a release-branch cadence.</p>
+    <p><b>Lessons:</b> Settle object ownership before the object count grows. Give AI coding agents read-only metadata access, not only the repo. Write down the central-team / project-team boundary so other teams can reuse the template.</p>
+  </div>
+  <h3>Pattern B: Regulated warehouse migration</h3>
+  <div class="card" style="margin-top:12px">
+    <p><b>Context:</b> A financial-services company with separate brokerage and banking entities is migrating a decade-old cloud warehouse to Snowflake under a fixed contract deadline. Some pipelines feed regulatory and customer-facing outputs and must be re-certified.</p>
+    <p><b>Decisions:</b></p>
+    <ul>
+      <li>Keep the imperative tool the team already knows (Liquibase) for database objects.</li>
+      <li>Keep dbt Core with self-hosted Airflow, and also deploy the dbt project object to Snowflake for its metadata.</li>
+      <li>Limit Terraform to infrastructure-team objects (network, connectors).</li>
+      <li>Use one account per legal entity, each with its own environments, and read-only shares across entities.</li>
+      <li>Block secondary roles so people who wear several hats switch roles explicitly.</li>
+    </ul>
+    <p><b>Migration safeguards:</b> Move critical jobs one-for-one into a restricted database that only service users can read, so consumers don't build on legacy logic. Deprecate unused models instead of lifting and shifting everything. Run old and new systems in parallel and log automated comparisons (row counts, key statistics) to a table for leadership sign-off and audit evidence.</p>
+    <p><b>Open items they planned for:</b> how grants are managed across accounts, a deployment path for future Streamlit and Snowpark objects, and a runbook for privileged network setup.</p>
+  </div>
+      </div>
+      <div class="pager"><a class="pn" href="#decision">&#8592; Decision matrix</a><a class="pn" href="#antipatterns">Anti-patterns &#8594;</a></div>
+    </section>
+    <section id="antipatterns" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-guide">Guidance &#183; 15</div>
+        <h2 class="page-title">Anti-patterns</h2>
+        
+      </div>
+      <div class="card">
+<div class="table-wrap"><table>
+    <thead><tr><th>Avoid</th><th>Why</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Two tools managing the same object</td><td>They overwrite each other's state and report constant drift.</td><td>One owner per object. Document the boundary.</td></tr>
+      <tr><td>Treating a Git repository connection as "DevOps"</td><td>Connecting Snowflake to Git helps development, but gives you no approvals, ordered environments, or build steps by itself.</td><td>Run deployments from a CI/CD platform.</td></tr>
+      <tr><td>Using <code>EXECUTE IMMEDIATE FROM</code> loops as the deployment engine</td><td>No change history, no run-once guarantees, and no build steps.</td><td>Use a change-management tool. Keep <code>EXECUTE IMMEDIATE FROM</code> for ad-hoc scripts.</td></tr>
+      <tr><td>Using dbt hooks and macros to manage non-dbt objects</td><td>Procedures, tasks, and grants hidden in hooks are hard to review, order, and audit.</td><td>Pair dbt with a change tool that owns those objects.</td></tr>
+      <tr><td>Mirroring the database folder tree in an imperative repo</td><td>Scripts that change several objects don't fit per-object folders, and history becomes hard to follow.</td><td>Organize by release or version, and put the story ID in file names.</td></tr>
+      <tr><td>Managing data-bearing tables with a tool that may recreate them</td><td>A planned replace silently drops the data and history.</td><td>Leave tables to DCM or an imperative tool, or gate on plan review.</td></tr>
+      <tr><td>Hand-written undo scripts</td><td>They rarely match the failure state, and data has moved on.</td><td>Roll forward. Use Time Travel or clones to recover data.</td></tr>
+      <tr><td>Rebuilding environments by replaying all DDL</td><td>You get empty, unrealistic environments.</td><td>Zero-copy clone, then apply pending changes.</td></tr>
+      <tr><td>Manual fixes in production</td><td>Causes drift and depends on one person's knowledge.</td><td>Every change goes through a tracked script or definition.</td></tr>
+      <tr><td>Naming a production database "DEV" (or other ad-hoc names)</td><td>Hard to undo later.</td><td>Agree conventions before the first object exists.</td></tr>
+    </tbody>
+  </table></div>
+      </div>
+      <div class="pager"><a class="pn" href="#patterns">&#8592; Field patterns</a><a class="pn" href="#resources">Resources &#8594;</a></div>
+    </section>
+    <section id="resources" class="section">
+      <div class="page-header">
+        <div class="step-tag tag-guide">Guidance &#183; 16</div>
+        <h2 class="page-title">Resources</h2>
+        
+      </div>
+      <div class="card">
+<ul>
+    <li><a href="https://docs.snowflake.com/en/developer-guide/builders/devops-with-snowflake">DevOps with Snowflake</a> (overview, DCM vs Terraform, CI/CD stages)</li>
+    <li><a href="https://docs.snowflake.com/en/user-guide/dcm-projects/dcm-projects-overview">Snowflake DCM Projects</a> and <a href="https://docs.snowflake.com/en/user-guide/dcm-projects/dcm-projects-supported-entities">supported entities</a></li>
+    <li><a href="https://docs.snowflake.com/en/release-notes/2026/other/2026-08-07-dcm-projects-ga">DCM Projects GA release note</a></li>
+    <li><a href="https://www.snowflake.com/en/developers/guides/get-started-snowflake-dcm-projects/">Quickstart: Getting Started with DCM Projects</a> and <a href="https://github.com/Snowflake-Labs/snowflake_dcm_projects">sample repo</a></li>
+    <li><a href="https://github.com/Snowflake-Labs/schemachange">schemachange on GitHub</a>, <a href="https://jeremiahhansen.medium.com/schemachange-plus-snowflake-cli-28cfe19f2c58">schemachange plus Snowflake CLI</a> (blog post by the tool's author, on CLI migration scripts), and <a href="https://www.snowflake.com/en/developers/guides/devops-dcm-schemachange-github/">schemachange + GitHub Actions quickstart</a></li>
+    <li><a href="https://docs.snowflake.com/en/developer-guide/snowflake-cli/index">Snowflake CLI</a> and <a href="https://docs.snowflake.com/en/developer-guide/snowflake-cli/cicd/integrate-ci-cd">integrating CI/CD with Snowflake CLI</a></li>
+    <li><a href="https://docs.snowflake.com/en/user-guide/data-engineering/dbt-projects-on-snowflake">dbt Projects on Snowflake</a></li>
+    <li><a href="https://docs.snowflake.com/en/user-guide/terraform">Snowflake Terraform provider</a></li>
+    <li><a href="https://docs.snowflake.com/en/user-guide/scim-okta">Okta SCIM integration</a> and <a href="https://docs.snowflake.com/en/sql-reference/sql/create-session-policy">CREATE SESSION POLICY</a></li>
+  </ul>
+      </div>
+      <div class="pager"><a class="pn" href="#antipatterns">&#8592; Anti-patterns</a><span></span></div>
+    </section>
+  </div>
+  <footer>This guide summarizes publicly documented Snowflake capabilities and common field practice as of October 2026. Product status (GA or preview) and supported objects change often, so confirm against the linked documentation before you implement.</footer>
+</div>
+
+<script>
+(function () {
+  document.documentElement.classList.add('js');
+  var sections = Array.prototype.slice.call(document.querySelectorAll('.section'));
+  var navs = Array.prototype.slice.call(document.querySelectorAll('.nav-item'));
+  function show(id) {
+    var target = document.getElementById(id);
+    if (!target || !target.classList.contains('section')) { target = sections[0]; }
+    sections.forEach(function (s) { s.classList.toggle('active', s === target); });
+    navs.forEach(function (n) { n.classList.toggle('active', n.getAttribute('data-sec') === target.id); });
+    window.scrollTo(0, 0);
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest('a[href^="#"]');
+    if (!a) { return; }
+    var id = a.getAttribute('href').slice(1);
+    if (document.getElementById(id) && document.getElementById(id).classList.contains('section')) {
+      e.preventDefault();
+      try { history.replaceState(null, '', '#' + id); } catch (err) {}
+      show(id);
+    }
+  });
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+  show(location.hash.slice(1));
+})();
+</script>
+</body>
+</html>

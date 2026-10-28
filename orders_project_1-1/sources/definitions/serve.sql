@@ -1,0 +1,19 @@
+-- Consumption views.
+
+DEFINE VIEW ORDERS{{env_suffix}}.SERVE.V_DAILY_REVENUE
+COMMENT = 'Daily revenue for BI'
+AS
+SELECT ORDER_DAY, ORDER_COUNT, REVENUE
+FROM ORDERS{{env_suffix}}.ANALYTICS.DAILY_REVENUE;
+
+-- release 1.1: new view (CREATE)
+DEFINE VIEW ORDERS{{env_suffix}}.SERVE.V_REVENUE_BY_CHANNEL
+COMMENT = 'Revenue split by sales channel'
+AS
+SELECT
+    COALESCE(CHANNEL, 'UNKNOWN') AS CHANNEL,
+    COUNT(*)                     AS ORDER_COUNT,
+    SUM(AMOUNT)                  AS REVENUE
+FROM ORDERS{{env_suffix}}.RAW.ORDERS
+WHERE STATUS <> 'CANCELLED'
+GROUP BY 1;

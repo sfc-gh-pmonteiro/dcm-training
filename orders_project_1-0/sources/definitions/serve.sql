@@ -1,0 +1,7 @@
+-- Consumption views.
+
+DEFINE VIEW ORDERS{{env_suffix}}.SERVE.V_DAILY_REVENUE
+COMMENT = 'Daily revenue for BI'
+AS
+SELECT ORDER_DAY, ORDER_COUNT, REVENUE
+FROM ORDERS{{env_suffix}}.ANALYTICS.DAILY_REVENUE;

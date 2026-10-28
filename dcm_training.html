@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="snowflake-source" content="cortex-agent-authored" />
+<title>DCM Projects in 40 minutes: DEV / QA / PRD the declarative way</title>
+<script type="application/json" id="snowflake-report-metadata">
+{
+  "generated": "2026-10-28",
+  "intent": "40-minute end-to-end training on Snowflake DCM Projects with a DEV/QA/PRD hands-on lab, written from a CI/CD engineer's perspective.",
+  "dataSources": [
+    { "type": "doc", "url": "https://docs.snowflake.com/en/sql-reference/sql/execute-dcm-project" },
+    { "type": "doc", "url": "https://docs.snowflake.com/en/user-guide/dcm-projects/dcm-projects-use" },
+    { "type": "doc", "url": "https://docs.snowflake.com/en/user-guide/dcm-projects/dcm-projects-cicd" },
+    { "type": "doc", "url": "https://docs.snowflake.com/en/developer-guide/builders/devops-with-snowflake" },
+    { "type": "file", "path": "setup_training.sh" },
+    { "type": "file", "path": "dcm_training_setup.sql" },
+    { "type": "file", "path": "dcm_training_companion.sql" },
+    { "type": "file", "path": "dcm_training_cli.sh" },
+    { "type": "file", "path": "purge_training.sh" },
+    { "type": "file", "path": ".github/workflows/dcm.yml" },
+    { "type": "file", "path": "orders_project_1-1/" }
+  ],
+  "sections": [
+    { "id": "why", "title": "Why DCM", "minutes": "0-4" },
+    { "id": "concepts", "title": "Concepts", "minutes": "4-11" },
+    { "id": "envs", "title": "Environment strategy", "minutes": "11-16" },
+    { "id": "lab", "title": "Hands-on lab", "minutes": "16-34", "producerNotes": "Code mirrors dcm_training_companion.sql; keep both in sync." },
+    { "id": "cicd", "title": "CI/CD and production", "minutes": "34-38", "producerNotes": "Preview list from the Aug 2026 DCM GA release note; re-check on refresh." },
+    { "id": "recap", "title": "Recap and resources", "minutes": "38-40" }
+  ]
+}
+</script>
+<style>
+:root{
+  color-scheme: light dark;
+  --blue:#29B5E8; --mid:#11567F; --dark:#0A1628; --orange:#FF9F36; --purple:#7D44CF; --green:#1A7A40;
+  --canvas: light-dark(#F4F7FA,#0b141b);
+  --surface: light-dark(#ffffff,#121f28);
+  --panel: light-dark(#F8FAFC,#182a35);
+  --text: light-dark(#334155,#d6dde2);
+  --heading: light-dark(#0A1628,#eef4f8);
+  --accent: light-dark(#11567F,#71D3DC);
+  --border: light-dark(#e0e7ef,#2a3d48);
+  --side-w: 260px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:-apple-system,system-ui,Segoe UI,Arial,sans-serif;background:var(--canvas);color:var(--text);font-size:15px;line-height:1.6}
+img,svg{max-width:100%;height:auto}
+a{color:var(--accent)}
+#side{position:fixed;inset:0 auto 0 0;width:var(--side-w);background:var(--dark);color:#fff;overflow-y:auto;padding-bottom:20px;z-index:10}
+.brand{padding:20px;border-bottom:1px solid rgba(255,255,255,.1)}
+.brand b{display:block;font-size:16px;letter-spacing:.5px;text-transform:uppercase}
+.brand span{font-size:11px;opacity:.55;text-transform:uppercase;letter-spacing:1px}
+.nav a{display:flex;justify-content:space-between;gap:8px;padding:9px 20px;color:rgba(255,255,255,.72);text-decoration:none;font-size:13.5px;border-left:3px solid transparent}
+.nav a:hover{background:rgba(255,255,255,.06);color:#fff}
+.nav a.active{background:rgba(41,181,232,.14);color:var(--blue);border-left-color:var(--blue);font-weight:700}
+.nav small{opacity:.6;font-weight:400}
+.timer{margin:16px 20px;padding:12px;border:1px solid rgba(255,255,255,.15);border-radius:8px;font-size:12.5px}
+.timer .t{font-size:24px;font-weight:700;color:var(--blue);font-variant-numeric:tabular-nums}
+.timer button{background:var(--blue);border:0;color:#04223a;font-weight:700;border-radius:6px;padding:5px 10px;margin:6px 4px 0 0;cursor:pointer}
+main{margin-left:var(--side-w)}
+.top{position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--border);padding:12px clamp(16px,3vw,36px);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;z-index:5}
+.top b{color:var(--heading)}
+.top span{font-size:12.5px;opacity:.75}
+.content{padding:clamp(16px,3vw,36px);max-width:1180px}
+section{margin-bottom:44px;scroll-margin-top:70px}
+.kicker{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:3px 10px;border-radius:20px;background:light-dark(#E3F2FD,#15303f);color:var(--accent)}
+h1{color:var(--heading);font-size:30px;margin:8px 0 6px;line-height:1.2}
+h2{color:var(--heading);font-size:26px;margin:8px 0 6px;text-transform:uppercase;letter-spacing:.4px}
+h3{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--accent);margin:26px 0 10px;display:flex;align-items:center;gap:8px}
+h3::after{content:'';flex:1;height:1px;background:var(--border)}
+h4{margin:0 0 6px;color:var(--heading)}
+p,li{max-width:95ch}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:clamp(16px,2.5vw,26px)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:14px 0}
+.grid>div{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.grid>div p{margin:0;font-size:14px}
+.callout{border-left:4px solid var(--blue);background:light-dark(#EBF5FB,#12303f);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+.callout.warn{border-left-color:#F39C12;background:light-dark(#FEF9E7,#3a2e12)}
+.callout.note{border-left-color:var(--purple);background:light-dark(#F3EEFC,#261a3a)}
+.table-wrap{overflow-x:auto;margin:14px 0;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{background:light-dark(#EAF6FD,#15303f);color:var(--accent);text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;padding:9px 12px}
+td{padding:9px 12px;border-top:1px solid var(--border);vertical-align:top}
+code{font-family:SF Mono,Menlo,Consolas,monospace;font-size:.88em;background:light-dark(#eef2f6,#0d1820);color:light-dark(#4C1D95,#d2a8ff);padding:1px 5px;border-radius:4px}
+pre{background:#0D1117;color:#E6EDF3;border-radius:8px;padding:14px 16px;overflow-x:auto;font-family:SF Mono,Menlo,Consolas,monospace;font-size:12.8px;line-height:1.6;margin:12px 0}
+pre code{background:none;color:inherit;padding:0;font-size:inherit}
+.c{color:#8b949e}.k{color:#ff7b72}.s{color:#a5d6ff}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px;vertical-align:middle;letter-spacing:.4px}
+.ga{background:rgba(46,204,113,.15);color:light-dark(#1A7A40,#6ee7a0);border:1px solid rgba(46,204,113,.4)}
+.pv{background:rgba(243,156,18,.15);color:light-dark(#8a4b00,#fbbf61);border:1px solid rgba(243,156,18,.4)}
+.step{display:flex;gap:14px;margin:22px 0 8px;align-items:baseline}
+.num{flex:none;width:30px;height:30px;border-radius:50%;background:var(--blue);color:#04223a;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+.step h4{font-size:17px}
+.mins{font-size:12px;opacity:.7;margin-left:6px}
+.agenda td:first-child{white-space:nowrap;font-weight:700;color:var(--accent)}
+.diagram{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px;margin:14px 0;overflow-x:auto}
+.diagram svg text{font-family:-apple-system,system-ui,Arial,sans-serif}
+.ink{fill:light-dark(#0A1628,#eef4f8)}
+.sub{fill:light-dark(#475569,#aab6c0)}
+.line{stroke:light-dark(#64748b,#8aa0ad)}
+details{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 14px;margin:10px 0}
+summary{cursor:pointer;font-weight:700;color:var(--heading)}
+footer{padding:0 clamp(16px,3vw,36px) 36px;font-size:12.5px;opacity:.75;max-width:1180px}
+@media (max-width:900px){
+  #side{position:static;width:100%}
+  main{margin-left:0}
+  .nav{display:flex;flex-wrap:wrap;padding:0 8px}
+  .nav a{border-left:0;border-radius:6px;padding:6px 10px}
+  .top{position:static}
+}
+</style>
+</head>
+<body>
+
+<nav id="side" aria-label="Training sections">
+  <div class="brand"><b>DCM Projects</b><span>DEV / QA / PRD in 40 min</span></div>
+  <div class="nav">
+    <a href="#why">1. Why DCM <small>0-4</small></a>
+    <a href="#concepts">2. Concepts <small>4-11</small></a>
+    <a href="#envs">3. Environments <small>11-16</small></a>
+    <a href="#lab">4. Hands-on lab <small>16-34</small></a>
+    <a href="#cicd">5. CI/CD &amp; prod <small>34-38</small></a>
+    <a href="#recap">6. Recap <small>38-40</small></a>
+  </div>
+  <div class="timer" aria-live="polite">
+    Session timer
+    <div class="t" id="clock">40:00</div>
+    <div id="phase">Not started</div>
+    <button id="startBtn" type="button">Start</button><button id="resetBtn" type="button">Reset</button>
+  </div>
+</nav>
+
+<main>
+  <div class="top"><b>Database Change Management, declaratively</b><span>October 2026 &middot; check linked docs before you implement</span></div>
+  <div class="content">
+
+  <!-- ============================================================ INTRO -->
+  <section>
+    <span class="kicker">Overview</span>
+    <h1>Snowflake DCM Projects: from DEV to PRD with plan, deploy and verify</h1>
+    <p>This training is for engineers who already ship application code through pipelines and want the same discipline for Snowflake objects. By the end you will have deployed one data product to three environments from one set of files, caught drift, restored a previous state and read the audit trail.</p>
+    <div class="table-wrap"><table class="agenda">
+      <thead><tr><th>Minutes</th><th>Section</th><th>You walk away with</th></tr></thead>
+      <tbody>
+        <tr><td>0-4</td><td>Why DCM</td><td>The problem it solves and the principles behind it</td></tr>
+        <tr><td>4-11</td><td>Concepts</td><td>Project, manifest, targets, DEFINE, Jinja, the lifecycle, commands</td></tr>
+        <tr><td>11-16</td><td>Environment strategy</td><td>One project per environment, deployer roles, sandboxes</td></tr>
+        <tr><td>16-34</td><td>Hands-on lab</td><td>Deploy, change, promote, drift, recover, audit</td></tr>
+        <tr><td>34-38</td><td>CI/CD and production</td><td>Pipeline, gates, gotchas, anti-patterns, tool choice</td></tr>
+        <tr><td>38-40</td><td>Recap</td><td>Checklist and next steps</td></tr>
+      </tbody></table></div>
+    <div class="callout note"><strong>Setup (before the session).</strong> You need ACCOUNTADMIN once and <a href="https://docs.snowflake.com/en/developer-guide/snowflake-cli/installation/installation">Snowflake CLI</a> 3.24.0 or later. From the training folder, run <code>./setup_training.sh &lt;connection&gt;</code>. It sets your account in the manifests, then runs <code>dcm_training_setup.sql</code>, which creates the roles and project objects and uploads the sources, but deploys nothing. During the lab, use <code>dcm_training_companion.sql</code>. <code>dcm_training_cli.sh</code> is a command cheat sheet, not a script. Clean up with <code>./purge_training.sh &lt;connection&gt;</code>. The step-by-step instructions are in <code>README.md</code>.</div>
+  </section>
+
+  <!-- ============================================================ 1. WHY -->
+  <section id="why">
+    <span class="kicker">Section 1 &middot; 0-4 min</span>
+    <h2>Why DCM</h2>
+    <p>Most Snowflake estates start the same way: worksheets, hand-run DDL, a "prod fix" nobody wrote down. Environments drift apart, deployments depend on a person, and nobody can answer "what changed on Tuesday?". Imperative migration scripts help, but the current shape of an object is spread across years of files.</p>
+    <p><strong>DCM Projects</strong> is Snowflake's native, declarative change management (GA in August 2026). You describe the state you want; Snowflake computes the diff, orders it, and applies it. Snowflake's DevOps guidance positions it as the recommended native option for objects inside your databases, alongside Terraform for account and cloud infrastructure.</p>
+    <div class="grid">
+      <div><h4>Move faster</h4><p>One readable file per area, Jinja for environments, Cortex Code to author and debug definitions.</p></div>
+      <div><h4>Deploy predictably</h4><p>PLAN shows every CREATE, ALTER and DROP before anything changes. The same files go to every environment.</p></div>
+      <div><h4>Stay traceable</h4><p>Every deployment is numbered, can carry an alias, and keeps its rendered definitions as artifacts.</p></div>
+      <div><h4>Recover quickly</h4><p>Re-apply the defined state to remove drift, or redeploy a previous deployment's definitions.</p></div>
+    </div>
+    <h3>The principles we will apply</h3>
+    <ol>
+      <li><strong>Everything in Git.</strong> Production gets nothing that didn't come through version control.</li>
+      <li><strong>Deploy only through CI/CD,</strong> with service users. People touch production as little as possible.</li>
+      <li><strong>Convergent state.</strong> DEV, QA and PRD differ only by configuration, never by hand-applied fixes.</li>
+      <li><strong>Validate before deploy.</strong> Every pull request shows a PLAN; drops get special attention.</li>
+      <li><strong>Roll forward.</strong> Fix a bad change with a new change. Restoring definitions does not restore data.</li>
+      <li><strong>One owner per object.</strong> Two tools reconciling the same object will fight each other.</li>
+    </ol>
+  </section>
+
+  <!-- ============================================================ 2. CONCEPTS -->
+  <section id="concepts">
+    <span class="kicker">Section 2 &middot; 4-11 min</span>
+    <h2>Concepts</h2>
+
+    <h3>Where DCM sits: the layers model</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Layer</th><th>Examples</th><th>Typical owner / tool</th></tr></thead>
+      <tbody>
+        <tr><td>Identity</td><td>Users, groups</td><td>Identity provider through SCIM</td></tr>
+        <tr><td>Account &amp; environment</td><td>Databases, warehouses, roles, network policies</td><td>Platform team: DCM Projects or Terraform</td></tr>
+        <tr><td>Database objects</td><td>Schemas, tables, views, dynamic tables, tasks, stages, functions, procedures, grants, expectations</td><td><strong>DCM Projects</strong> (or an imperative tool)</td></tr>
+        <tr><td>Transformation</td><td>Models that build tables from sources</td><td>dbt (dbt Projects on Snowflake), or dynamic tables in DCM</td></tr>
+        <tr><td>Code-backed objects</td><td>dbt project objects, Streamlit, notebooks, packaged Snowpark code</td><td>Snowflake CLI from the pipeline</td></tr>
+        <tr><td>Data fixes &amp; backfills</td><td>UPDATE, data moves, renames with data</td><td>A tracked imperative path, never the definition files</td></tr>
+      </tbody></table></div>
+    <div class="callout"><strong>Build an object-ownership map first.</strong> List each object type, give it exactly one owner, keep the list in the repo. It drives tool choice more than features do. DCM does not manage users, SSO, account creation, or catalog, notification and security integrations.</div>
+
+    <h3>Declarative vs imperative</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th></th><th>Declarative (DCM, Terraform)</th><th>Imperative (schemachange, Flyway, Liquibase)</th></tr></thead>
+      <tbody>
+        <tr><td>You write</td><td>What the object should look like</td><td>Ordered scripts with the exact changes</td></tr>
+        <tr><td>Strengths</td><td>One readable definition; plan and diff; drift detection</td><td>Any change, including backfills and renames</td></tr>
+        <tr><td>Watch out</td><td>Removing a definition drops the object; renames need a separate step</td><td>No single "current state"; scripts must be idempotent</td></tr>
+      </tbody></table></div>
+    <p>A diff tool sees before and after, not intent. Moving a column's data into a new table looks like "create table, drop column" and the data is lost. Use <strong>expand, migrate, contract</strong>: add the new structure (DCM), backfill with a tracked script, switch consumers, then remove the old definition in a later release.</p>
+
+    <h3>The building blocks</h3>
+    <div class="grid">
+      <div><h4>DCM project object</h4><p>A schema-level object (<code>CREATE DCM PROJECT</code>) that stores deployment history and tracks what it manages. Its <strong>owner role</strong> is the only role that can PLAN or DEPLOY.</p></div>
+      <div><h4>manifest.yml</h4><p>Targets (account, project object, owner role, configuration) plus templating defaults and per-configuration overrides.</p></div>
+      <div><h4>Definition files</h4><p><code>sources/definitions/*.sql</code> holding <code>DEFINE</code>, <code>GRANT</code> and <code>ATTACH</code> statements, with Jinja variables, loops and macros.</p></div>
+      <div><h4>Deployment</h4><p>Each DEPLOY gets a number (<code>DEPLOYMENT$n</code>) and an optional alias. Think of the alias as the commit message for the environment.</p></div>
+    </div>
+
+    <h3>DEFINE = CREATE OR ALTER, plus "remove means drop"</h3>
+<pre><code><span class="c">-- sources/definitions/raw.sql</span>
+<span class="k">DEFINE TABLE</span> ORDERS{{env_suffix}}.RAW.ORDERS (
+    ORDER_ID NUMBER NOT NULL, CUSTOMER_ID NUMBER NOT NULL,
+    ORDER_TS TIMESTAMP_NTZ, AMOUNT NUMBER(12,2), STATUS VARCHAR(20)
+)
+CHANGE_TRACKING = TRUE
+DATA_METRIC_SCHEDULE = <span class="s">'TRIGGER_ON_CHANGES'</span>;
+
+<span class="k">GRANT SELECT ON TABLE</span> ORDERS{{env_suffix}}.RAW.ORDERS <span class="k">TO DATABASE ROLE</span> ORDERS{{env_suffix}}.RAW_READER;
+
+<span class="k">ATTACH DATA METRIC FUNCTION</span> SNOWFLAKE.CORE.NULL_COUNT
+    <span class="k">TO TABLE</span> ORDERS{{env_suffix}}.RAW.ORDERS <span class="k">ON</span> (ORDER_ID)
+    <span class="k">EXPECTATION</span> NO_NULL_ORDER_IDS (value = 0);</code></pre>
+    <ul>
+      <li>Use <strong>fully qualified names</strong> everywhere. DCM works out dependency order for you.</li>
+      <li>Only changes that <code>CREATE OR ALTER</code> supports can be deployed. Some properties are immutable (for example a pipe's COPY body), which means drop and recreate.</li>
+      <li>A project can never DEFINE its own parent database or schema. The project object lives in a separate container (here <code>DCM_TRAINING.PROJECTS</code>).</li>
+    </ul>
+
+    <h3>The lifecycle</h3>
+    <div class="diagram" role="img" aria-label="Lifecycle: create, define, plan, deploy, verify, then iterate">
+      <svg viewBox="0 0 900 190" width="900" height="190">
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#29B5E8"/></marker></defs>
+        <g>
+          <rect x="10"  y="40" width="150" height="70" rx="10" fill="#11567F"/>
+          <rect x="190" y="40" width="150" height="70" rx="10" fill="#1b7fb3"/>
+          <rect x="370" y="40" width="150" height="70" rx="10" fill="#29B5E8"/>
+          <rect x="550" y="40" width="150" height="70" rx="10" fill="#7D44CF"/>
+          <rect x="730" y="40" width="150" height="70" rx="10" fill="#1A7A40"/>
+          <text x="85"  y="70" text-anchor="middle" fill="#fff" font-weight="700" font-size="16">CREATE</text>
+          <text x="85"  y="92" text-anchor="middle" fill="#fff" font-size="12">project object</text>
+          <text x="265" y="70" text-anchor="middle" fill="#fff" font-weight="700" font-size="16">DEFINE</text>
+          <text x="265" y="92" text-anchor="middle" fill="#fff" font-size="12">manifest + files in Git</text>
+          <text x="445" y="70" text-anchor="middle" fill="#04223a" font-weight="700" font-size="16">PLAN</text>
+          <text x="445" y="92" text-anchor="middle" fill="#04223a" font-size="12">dry run, review diff</text>
+          <text x="625" y="70" text-anchor="middle" fill="#fff" font-weight="700" font-size="16">DEPLOY AS</text>
+          <text x="625" y="92" text-anchor="middle" fill="#fff" font-size="12">apply + alias</text>
+          <text x="805" y="70" text-anchor="middle" fill="#fff" font-weight="700" font-size="16">VERIFY</text>
+          <text x="805" y="92" text-anchor="middle" fill="#fff" font-size="12">TEST / smoke / history</text>
+          <line x1="160" y1="75" x2="188" y2="75" stroke="#29B5E8" stroke-width="3" marker-end="url(#ar)"/>
+          <line x1="340" y1="75" x2="368" y2="75" stroke="#29B5E8" stroke-width="3" marker-end="url(#ar)"/>
+          <line x1="520" y1="75" x2="548" y2="75" stroke="#29B5E8" stroke-width="3" marker-end="url(#ar)"/>
+          <line x1="700" y1="75" x2="728" y2="75" stroke="#29B5E8" stroke-width="3" marker-end="url(#ar)"/>
+          <path d="M805,112 C805,175 265,175 265,114" fill="none" stroke="#29B5E8" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#ar)"/>
+          <text x="535" y="168" text-anchor="middle" class="sub" font-size="13">ITERATE: change files, PLAN DELTA while editing, full PLAN before every deploy</text>
+          <text x="85" y="28" text-anchor="middle" class="sub" font-size="12">once per environment</text>
+        </g>
+      </svg>
+    </div>
+    <p>PLAN renders Jinja, compares definitions with the account, converts them into CREATE, ALTER, DROP, GRANT and REVOKE statements, sorts them by dependency, compiles them and checks privileges. DEPLOY runs that same pipeline again and then executes it. <strong>DEPLOY recomputes the changeset; it does not replay a saved PLAN.</strong></p>
+
+    <h3>Commands</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>SQL</th><th>CLI</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>EXECUTE DCM PROJECT p PLAN</code></td><td><code>snow dcm plan --save-output</code></td><td><span class="tag ga">GA</span></td><td>Dry run against current account state. The pre-deploy gate.</td></tr>
+        <tr><td><code>... PLAN DELTA</code></td><td><code>snow dcm plan --delta</code></td><td><span class="tag ga">GA</span></td><td>Only changed definitions plus downstream. Fast, but blind to drift.</td></tr>
+        <tr><td><code>... DEPLOY AS "alias"</code></td><td><code>snow dcm deploy --alias</code></td><td><span class="tag ga">GA</span></td><td>Apply. Creates, alters, and drops what is no longer defined.</td></tr>
+        <tr><td><code>... FROM DEPLOYMENT "alias" | LAST</code></td><td>(SQL)</td><td><span class="tag ga">GA</span></td><td>Re-use a previous deployment's rendered definitions: drift fix or shape restore.</td></tr>
+        <tr><td><code>... TEST ALL</code></td><td><code>snow dcm test</code></td><td><span class="tag pv">PREVIEW</span></td><td>Evaluate all attached expectations now.</td></tr>
+        <tr><td><code>... PREVIEW &lt;fqn&gt;</code></td><td><code>snow dcm preview --object</code></td><td><span class="tag pv">PREVIEW</span></td><td>Sample rows of a definition, before it is deployed.</td></tr>
+        <tr><td><code>... PURGE</code></td><td><code>snow dcm purge</code></td><td><span class="tag ga">GA</span></td><td>Drop everything the project manages. Sandboxes and demos only.</td></tr>
+        <tr><td><code>SHOW DEPLOYMENTS / ENTITIES IN DCM PROJECT</code>, <code>DCM_DEPLOYMENT_HISTORY()</code></td><td><code>snow dcm list-deployments</code></td><td><span class="tag ga">GA</span></td><td>Observability and audit.</td></tr>
+      </tbody></table></div>
+    <div class="callout warn"><strong>Still preview at GA</strong> (per the GA release note): TEST and PREVIEW, the GitHub Actions for DCM, <code>DEFINE PIPE</code>, <code>DEFINE STREAM</code>, masking and row access policies, <code>ATTACH TAG</code>, inherited grants and container-level MANAGE GRANTS. The lab marks every preview step and gives a GA alternative where it matters.</div>
+  </section>
+
+  <!-- ============================================================ 3. ENVS -->
+  <section id="envs">
+    <span class="kicker">Section 3 &middot; 11-16 min</span>
+    <h2>Environment strategy</h2>
+    <h3>Rule 1: one project object per environment</h3>
+    <p>A DCM project has exactly one deployed instance. Deploying a different configuration to the same project <strong>drops everything that configuration doesn't define</strong>. So DEV, QA and PRD each get their own project object. All three point at the same files and differ only in configuration.</p>
+    <div class="diagram" role="img" aria-label="One Git repository feeds three DCM project objects, each owned by its own deployer role, each producing an environment database">
+      <svg viewBox="0 0 900 250" width="900" height="250">
+        <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8aa0ad"/></marker></defs>
+        <rect x="10" y="85" width="180" height="80" rx="10" fill="#0A1628" stroke="#29B5E8"/>
+        <text x="100" y="118" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">Git: orders_project_1-1/</text>
+        <text x="100" y="140" text-anchor="middle" fill="#9fd8ef" font-size="12">manifest.yml + definitions</text>
+        <g font-size="13">
+          <rect x="300" y="15"  width="250" height="62" rx="9" fill="#1b7fb3"/>
+          <rect x="300" y="95"  width="250" height="62" rx="9" fill="#7D44CF"/>
+          <rect x="300" y="175" width="250" height="62" rx="9" fill="#11567F"/>
+          <text x="425" y="40"  text-anchor="middle" fill="#fff" font-weight="700">ORDERS_DEV  (config DEV)</text>
+          <text x="425" y="60"  text-anchor="middle" fill="#fff">owner DCM_DEVELOPER</text>
+          <text x="425" y="120" text-anchor="middle" fill="#fff" font-weight="700">ORDERS_QA  (config QA)</text>
+          <text x="425" y="140" text-anchor="middle" fill="#fff">owner DCM_QA_DEPLOYER</text>
+          <text x="425" y="200" text-anchor="middle" fill="#fff" font-weight="700">ORDERS_PRD  (config PRD)</text>
+          <text x="425" y="220" text-anchor="middle" fill="#fff">owner DCM_PROD_DEPLOYER</text>
+          <rect x="660" y="15"  width="230" height="62" rx="9" class="ink" fill-opacity=".06" stroke="#8aa0ad"/>
+          <rect x="660" y="95"  width="230" height="62" rx="9" class="ink" fill-opacity=".06" stroke="#8aa0ad"/>
+          <rect x="660" y="175" width="230" height="62" rx="9" class="ink" fill-opacity=".06" stroke="#8aa0ad"/>
+          <text x="775" y="40"  text-anchor="middle" class="ink" font-weight="700">ORDERS_DEV database</text>
+          <text x="775" y="60"  text-anchor="middle" class="sub">XSMALL, task SUSPENDED</text>
+          <text x="775" y="120" text-anchor="middle" class="ink" font-weight="700">ORDERS_QA database</text>
+          <text x="775" y="140" text-anchor="middle" class="sub">XSMALL, task SUSPENDED</text>
+          <text x="775" y="200" text-anchor="middle" class="ink" font-weight="700">ORDERS_PRD database</text>
+          <text x="775" y="220" text-anchor="middle" class="sub">SMALL, task STARTED, 7d retention</text>
+        </g>
+        <g class="line" stroke-width="2" fill="none" marker-end="url(#ar2)">
+          <path d="M190,125 C245,125 245,46 298,46"/>
+          <path d="M190,125 L298,126"/>
+          <path d="M190,125 C245,125 245,206 298,206"/>
+          <path d="M550,46 L658,46"/><path d="M550,126 L658,126"/><path d="M550,206 L658,206"/>
+        </g>
+      </svg>
+    </div>
+
+    <h3>Rule 2: template every account-level name</h3>
+    <p>Databases, warehouses and account roles get <code>{{env_suffix}}</code>. Two projects can't manage the same object, so un-templated names collide as soon as a second environment or developer deploys.</p>
+<pre><code><span class="c"># manifest.yml (excerpt)</span>
+targets:
+  DEV: { project_name: DCM_TRAINING.PROJECTS.ORDERS_DEV, project_owner: DCM_DEVELOPER,     templating_config: DEV }
+  QA:  { project_name: DCM_TRAINING.PROJECTS.ORDERS_QA,  project_owner: DCM_QA_DEPLOYER,   templating_config: QA }
+  PRD: { project_name: DCM_TRAINING.PROJECTS.ORDERS_PRD, project_owner: DCM_PROD_DEPLOYER, templating_config: PRD }
+templating:
+  defaults:
+    env_suffix: <span class="s">'_DEV'</span>
+    wh_size: <span class="s">'XSMALL'</span>
+    task_state: <span class="s">'SUSPENDED'</span>
+    teams: [ { name: <span class="s">'FINANCE'</span>, raw_access: true }, { name: <span class="s">'MARKETING'</span>, raw_access: false } ]
+  configurations:
+    QA:  { env_suffix: <span class="s">'_QA'</span>,  project_owner_role: <span class="s">'DCM_QA_DEPLOYER'</span> }
+    PRD: { env_suffix: <span class="s">'_PRD'</span>, project_owner_role: <span class="s">'DCM_PROD_DEPLOYER'</span>, wh_size: <span class="s">'SMALL'</span>, task_state: <span class="s">'STARTED'</span> }</code></pre>
+    <p>Variables resolve in three tiers: <code>defaults</code>, then the configuration, then runtime values (<code>USING CONFIGURATION DEV (env_suffix =&gt; '_SBX_42')</code> or <code>--variable</code>).</p>
+
+    <h3>Rule 3: separate owner roles, least visibility for everyone else</h3>
+    <div class="grid">
+      <div><h4>DCM_DEVELOPER</h4><p>Owns DEV and per-ticket sandboxes. Developers have it.</p></div>
+      <div><h4>DCM_QA_DEPLOYER / DCM_PROD_DEPLOYER</h4><p>Own QA and PRD. In real life they are granted <strong>only to CI service users</strong> that authenticate with OIDC or key pair.</p></div>
+      <div><h4>DCM_AUDITOR</h4><p><code>READ</code> shows what a project manages. <code>MONITOR</code> adds full deployment history and artifacts. Neither can deploy. Watch secondary roles: a user who also holds a deployer role can still deploy from an auditor session.</p></div>
+    </div>
+    <div class="callout"><strong>Keep the owner in control.</strong> Roles that the project creates are granted to <code>{{project_owner_role}}</code>. If a definition transfers OWNERSHIP to a role, the owner role must hold that role. Otherwise PLAN and DEPLOY refuse to run rather than lock the owner out.</div>
+
+    <h3>Rule 4: sandbox per ticket, and pick a project shape</h3>
+    <ul>
+      <li><strong>Sandbox:</strong> a separate project object and a unique suffix (<code>ORDERS_SBX_STORY_1234</code>). Use PLAN DELTA while editing, a full PLAN before deploying, and PURGE plus DROP when the ticket closes.</li>
+      <li><strong>A. One folder, one target:</strong> most objects share an owner. Keep loops modest; about 20 iterations is a good rule of thumb.</li>
+      <li><strong>B. One folder, many targets:</strong> same definitions, but different owners or independent deploys (DEV/QA/PRD, or one target per tenant).</li>
+      <li><strong>C. Separate folders:</strong> a platform project (databases, warehouses, admin roles) and domain projects that build inside them. Keep dependencies one-directional and deploy upstream first; DCM does not coordinate across projects.</li>
+    </ul>
+    <p>Starting with one account is simplest: zero-copy cloning only works within an account. Use several accounts for real boundaries (legal entities, regulation, residency). The manifest then just changes <code>account_identifier</code> per target.</p>
+  </section>
+
+  <!-- ============================================================ 4. LAB -->
+  <section id="lab">
+    <span class="kicker">Section 4 &middot; 16-34 min</span>
+    <h2>Hands-on lab: the Orders data product</h2>
+    <p>Run <code>dcm_training_companion.sql</code> top to bottom. Every block is idempotent, so you can re-run it. The project manages a database, three schemas, a warehouse, a raw table, a dynamic table, two views, a task, database and account roles generated from a <code>teams</code> loop, and three data quality expectations.</p>
+<pre><code>orders_project_1-1/                     <span class="c"># release 1.1 = Git "main"</span>
+  manifest.yml                      <span class="c"># DEV, QA, PRD, SANDBOX targets</span>
+  sources/definitions/
+    infrastructure.sql  raw.sql  analytics.sql  serve.sql
+    tasks.sql  access.sql  expectations.sql
+  sources/macros/grants_macro.sql   <span class="c"># reusable grant macros</span>
+orders_project_1-0/          <span class="c"># release 1.0 = the previous Git commit (before the feature)</span></code></pre>
+
+    <div class="step"><span class="num">1</span><h4>Bootstrap <span class="mins">~3 min &middot; ACCOUNTADMIN, once</span></h4></div>
+    <p>The platform team's part: a container for project objects, a source stage, one deployer role per environment plus an auditor, and the three project objects. Each one is created by its own deployer role, so that role owns it.</p>
+<pre><code><span class="k">CREATE ROLE IF NOT EXISTS</span> DCM_PROD_DEPLOYER;
+<span class="k">GRANT CREATE DATABASE, CREATE WAREHOUSE, CREATE ROLE, EXECUTE TASK, EXECUTE DATA METRIC FUNCTION</span>
+    <span class="k">ON ACCOUNT TO ROLE</span> DCM_PROD_DEPLOYER;
+<span class="k">GRANT CREATE DCM PROJECT ON SCHEMA</span> DCM_TRAINING.PROJECTS <span class="k">TO ROLE</span> DCM_PROD_DEPLOYER;
+<span class="k">USE ROLE</span> DCM_PROD_DEPLOYER;
+<span class="k">CREATE DCM PROJECT IF NOT EXISTS</span> DCM_TRAINING.PROJECTS.ORDERS_PRD;
+<span class="k">GRANT READ, MONITOR ON DCM PROJECT</span> DCM_TRAINING.PROJECTS.ORDERS_PRD <span class="k">TO ROLE</span> DCM_AUDITOR;</code></pre>
+    <p>All of this runs once, before the session: <code>setup_training.sh</code> sets your account in the manifests and runs <code>dcm_training_setup.sql</code>. That script also uploads both releases to <code>@DCM_TRAINING.PROJECTS.SOURCES/release-1.0/</code> and <code>/release-1.1/</code>. In the lab, just open it and explain it. In a real project, the source would be a Git repository clone or a Snowsight Workspace path (<code>snow://workspace/...</code>).</p>
+
+    <div class="step"><span class="num">2</span><h4>First DEV deployment <span class="mins">~4 min</span></h4></div>
+<pre><code><span class="k">USE ROLE</span> DCM_DEVELOPER;
+<span class="k">EXECUTE DCM PROJECT</span> DCM_TRAINING.PROJECTS.ORDERS_DEV
+    <span class="k">PLAN USING CONFIGURATION</span> DEV
+    <span class="k">FROM</span> <span class="s">'@DCM_TRAINING.PROJECTS.SOURCES/release-1.0/'</span>;          <span class="c">-- review: all CREATE</span>
+
+<span class="k">EXECUTE DCM PROJECT</span> DCM_TRAINING.PROJECTS.ORDERS_DEV
+    <span class="k">DEPLOY AS</span> "release-1.0" <span class="k">USING CONFIGURATION</span> DEV
+    <span class="k">FROM</span> <span class="s">'@DCM_TRAINING.PROJECTS.SOURCES/release-1.0/'</span>;
+
+<span class="c">-- run PLAN again: "changeset": []  &lt;- convergent and idempotent</span>
+<span class="k">EXECUTE TASK</span> ORDERS_DEV.RAW.TSK_LOAD_SAMPLE_ORDERS;              <span class="c">-- task is SUSPENDED in DEV; run once</span>
+<span class="k">CALL</span> SYSTEM$WAIT(20);                                               <span class="c">-- EXECUTE TASK is asynchronous</span>
+<span class="k">EXECUTE DCM PROJECT</span> DCM_TRAINING.PROJECTS.ORDERS_DEV <span class="k">TEST ALL</span>;   <span class="c">-- PREVIEW feature</span></code></pre>
+    <p>Things to point out: the warehouse was created before the dynamic table that uses it, although nobody ordered the files. The <code>teams</code> loop produced <code>ORDERS_FINANCE_DEV</code> (with RAW access) and <code>ORDERS_MARKETING_DEV</code> (without). <code>SHOW ENTITIES IN DCM PROJECT</code> lists everything that is now managed.</p>
+
+    <div class="step"><span class="num">3</span><h4>Feature change: release 1.1 <span class="mins">~3 min</span></h4></div>
+    <p>The feature branch adds a <code>CHANNEL</code> column, a <code>V_REVENUE_BY_CHANNEL</code> view and its grant, and changes the task body. Compare <code>orders_project_1-0</code> with <code>orders_project_1-1</code>: a small diff in four files.</p>
+<pre><code><span class="k">EXECUTE DCM PROJECT</span> ...ORDERS_DEV <span class="k">PLAN DELTA</span> <span class="k">USING CONFIGURATION</span> DEV <span class="k">FROM</span> <span class="s">'.../release-1.1/'</span>;  <span class="c">-- fast inner loop</span>
+<span class="k">EXECUTE DCM PROJECT</span> ...ORDERS_DEV <span class="k">PLAN</span>       <span class="k">USING CONFIGURATION</span> DEV <span class="k">FROM</span> <span class="s">'.../release-1.1/'</span>;  <span class="c">-- the real gate</span>
+
+<span class="c">-- read the changeset as rows</span>
+<span class="k">SELECT</span> c.value:type::STRING, c.value:object_id:domain::STRING, c.value:object_id:fqn::STRING
+<span class="k">FROM TABLE</span>(RESULT_SCAN(LAST_QUERY_ID())) r, <span class="k">LATERAL FLATTEN</span>(INPUT =&gt; r.$1:changeset) c;
+<span class="c">-- expect 5: ALTER TABLE (column added), CREATE VIEW, ALTER TASK, ALTER DATABASE ROLE (grant), ALTER ROLE (ownership)</span>
+
+<span class="k">EXECUTE DCM PROJECT</span> ...ORDERS_DEV <span class="k">DEPLOY AS</span> "feature-channel" <span class="k">USING CONFIGURATION</span> DEV <span class="k">FROM</span> <span class="s">'.../release-1.1/'</span>;</code></pre>
+    <div class="callout warn"><strong>PLAN DELTA is not a gate.</strong> It skips unchanged definitions, so it can't see what someone changed by hand. Always run a full PLAN before DEPLOY.</div>
+
+    <div class="step"><span class="num">4</span><h4>Promote: QA, then PRD <span class="mins">~5 min</span></h4></div>
+    <p>Same files, different project and configuration. This is exactly what CI runs on merge.</p>
+<pre><code><span class="k">USE ROLE</span> DCM_QA_DEPLOYER;
+<span class="k">EXECUTE DCM PROJECT</span> ...ORDERS_QA <span class="k">PLAN</span> <span class="k">USING CONFIGURATION</span> QA <span class="k">FROM</span> <span class="s">'.../release-1.1/'</span>;
+<span class="k">EXECUTE DCM PROJECT</span> ...ORDERS_QA <span class="k">DEPLOY AS</span> "release-1.1" <span class="k">USING CONFIGURATION</span> QA <span class="k">FROM</span> <span class="s">'.../release-1.1/'</span>;
+
+<span class="c">-- QA gate: TEST ALL (PREVIEW) or a GA SQL smoke test that returns PASS / FAIL</span>
+<span class="k">SELECT IFF</span>(COUNT(*) &gt; 0 <span class="k">AND</span> COUNT_IF(ORDER_ID <span class="k">IS NULL</span>) = 0
+           <span class="k">AND</span> COUNT(*) = COUNT(<span class="k">DISTINCT</span> ORDER_ID) <span class="k">AND</span> MIN(AMOUNT) &gt;= 0, <span class="s">'PASS'</span>, <span class="s">'FAIL'</span>)
+<span class="k">FROM</span> ORDERS_QA.RAW.ORDERS;
+
+<span class="k">USE ROLE</span> DCM_PROD_DEPLOYER;
+<span class="k">EXECUTE DCM PROJECT</span> ...ORDERS_PRD <span class="k">PLAN</span> <span class="k">USING CONFIGURATION</span> PRD <span class="k">FROM</span> <span class="s">'.../release-1.1/'</span>;
+<span class="c">-- drop protection: this must return zero rows</span>
+<span class="k">SELECT</span> ... <span class="k">WHERE</span> c.value:type::STRING = <span class="s">'DROP'</span>
+  <span class="k">AND</span> c.value:object_id:domain::STRING <span class="k">IN</span> (<span class="s">'DATABASE'</span>,<span class="s">'SCHEMA'</span>,<span class="s">'TABLE'</span>,<span class="s">'STAGE'</span>,<span class="s">'DYNAMIC_TABLE'</span>);
+<span class="k">EXECUTE DCM PROJECT</span> ...ORDERS_PRD <span class="k">DEPLOY AS</span> "release-1.1" <span class="k">USING CONFIGURATION</span> PRD <span class="k">FROM</span> <span class="s">'.../release-1.1/'</span>;</code></pre>
+    <p>In PRD the task is declared <code>STARTED</code>. Target state is reasserted on <strong>every</strong> deploy, so a hand-run <code>ALTER TASK ... SUSPEND</code> lasts only until the next release. To pause a task, change its definition. Without a declared state, a new task is created suspended.</p>
+
+    <div class="callout note"><strong>Same step from the CLI</strong> (see <code>dcm_training_cli.sh</code>), run in <code>orders_project_1-1/</code>:<br>
+      <code>snow dcm plan --target QA --role DCM_QA_DEPLOYER --save-output</code>, then <code>snow dcm deploy --target QA --role DCM_QA_DEPLOYER --alias "release-1.1"</code>, then the same for <code>--target PRD --role DCM_PROD_DEPLOYER</code>, with the <code>jq</code> drop check on <code>out/plan_result.json</code> in between. Always pass <code>--role</code>: the CLI runs as the connection's role, not the manifest's <code>project_owner</code>.</div>
+
+    <div class="step"><span class="num">5</span><h4>Drift, co-existing grants, recovery and audit <span class="mins">~4 min</span></h4></div>
+<pre><code><span class="c">-- a "quick fix" by hand</span>
+<span class="k">ALTER WAREHOUSE</span> ORDERS_WH_DEV <span class="k">SET</span> AUTO_SUSPEND = 600;
+<span class="k">GRANT SELECT ON VIEW</span> ORDERS_DEV.SERVE.V_DAILY_REVENUE <span class="k">TO ROLE</span> PUBLIC;
+
+<span class="k">EXECUTE DCM PROJECT</span> ...ORDERS_DEV <span class="k">PLAN</span> ... ;                         <span class="c">-- warehouse drift: 600 -&gt; 60</span>
+<span class="k">EXECUTE DCM PROJECT</span> ...ORDERS_DEV <span class="k">DEPLOY AS</span> "drift-fix" <span class="k">FROM DEPLOYMENT</span> "feature-channel";
+<span class="k">SHOW GRANTS ON VIEW</span> ORDERS_DEV.SERVE.V_DAILY_REVENUE;                  <span class="c">-- the PUBLIC grant survived!</span>
+
+<span class="k">EXECUTE DCM PROJECT</span> ...ORDERS_DEV <span class="k">PLAN FROM DEPLOYMENT</span> "release-1.0";  <span class="c">-- shape restore: drops CHANNEL + view</span>
+
+<span class="k">USE ROLE</span> DCM_AUDITOR;
+<span class="k">USE SECONDARY ROLES NONE</span>;     <span class="c">-- otherwise held deployer roles still apply</span>
+<span class="k">SHOW DEPLOYMENTS IN DCM PROJECT</span> DCM_TRAINING.PROJECTS.ORDERS_PRD;
+<span class="k">SELECT</span> * <span class="k">FROM TABLE</span>(DCM_TRAINING.INFORMATION_SCHEMA.DCM_DEPLOYMENT_HISTORY(
+    PROJECT_NAME =&gt; <span class="s">'DCM_TRAINING.PROJECTS.ORDERS_DEV'</span>));</code></pre>
+    <div class="grid">
+      <div><h4>Drift is reverted</h4><p>Properties of managed objects converge back to the definition on the next deploy. A scheduled full PLAN is a cheap drift detector.</p></div>
+      <div><h4>Extra grants co-exist</h4><p>DCM manages the grants it deployed. Grants made outside it are neither shown nor revoked. To enforce "no undeclared privileges", add a scheduled <code>SHOW GRANTS</code> comparison or a dedicated permissions tool.</p></div>
+      <div><h4>Restore shape, not data</h4><p><code>FROM DEPLOYMENT</code> re-applies old definitions. Data in a dropped column is gone. In PRD, prefer rolling forward, and use Time Travel or clones for data.</p></div>
+    </div>
+
+    <div class="step"><span class="num">6</span><h4>Optional patterns and cleanup <span class="mins">~1 min, read along</span></h4></div>
+    <ul>
+      <li><strong>Sandbox per ticket:</strong> <code>USING CONFIGURATION SANDBOX (env_suffix =&gt; '_SBX_STORY_1234')</code> on its own project object.</li>
+      <li><strong>Seed pre-production from PRD:</strong> <code>CREATE DATABASE ... CLONE ORDERS_PRD</code>. Clones keep fully qualified references, so redeploy the templated objects afterwards.</li>
+      <li><strong>Hand off without dropping:</strong> <code>ALTER &lt;object&gt; ... UNSET DCM PROJECT</code> or <code>ALTER DCM PROJECT ... UNMANAGE GRANT</code>, then remove the definition before the next deploy.</li>
+      <li><strong>Cleanup:</strong> <code>PURGE</code> drops every managed object and its data, so use it only on DEV and sandboxes. <code>DROP DCM PROJECT</code> alone leaves objects in place, unmanaged, and deletes the history. Both are commented out in the companion.</li>
+    </ul>
+  </section>
+
+  <!-- ============================================================ 5. CICD -->
+  <section id="cicd">
+    <span class="kicker">Section 5 &middot; 34-38 min</span>
+    <h2>CI/CD and running it in production</h2>
+    <h3>Reference pipeline</h3>
+    <div class="diagram" role="img" aria-label="Pipeline: feature branch sandbox, pull request plans, merge deploys QA, gate, approval, plan PRD, drop check, deploy PRD, refresh and test">
+      <svg viewBox="0 0 900 140" width="900" height="140">
+        <defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#29B5E8"/></marker></defs>
+        <g font-size="12" text-anchor="middle">
+          <rect x="5"   y="30" width="130" height="64" rx="8" fill="#11567F"/><text x="70"  y="56" fill="#fff" font-weight="700">Feature branch</text><text x="70"  y="76" fill="#fff">sandbox + DELTA</text>
+          <rect x="160" y="30" width="130" height="64" rx="8" fill="#1b7fb3"/><text x="225" y="56" fill="#fff" font-weight="700">Pull request</text><text x="225" y="76" fill="#fff">PLAN QA + PRD</text>
+          <rect x="315" y="30" width="130" height="64" rx="8" fill="#29B5E8"/><text x="380" y="56" fill="#04223a" font-weight="700">Merge to main</text><text x="380" y="76" fill="#04223a">DEPLOY QA</text>
+          <rect x="470" y="30" width="130" height="64" rx="8" fill="#7D44CF"/><text x="535" y="56" fill="#fff" font-weight="700">Gate</text><text x="535" y="76" fill="#fff">TEST / smoke</text>
+          <rect x="625" y="30" width="130" height="64" rx="8" fill="#c27a1e"/><text x="690" y="56" fill="#fff" font-weight="700">Approval</text><text x="690" y="76" fill="#fff">PLAN PRD, no DROP</text>
+          <rect x="780" y="30" width="115" height="64" rx="8" fill="#1A7A40"/><text x="837" y="56" fill="#fff" font-weight="700">DEPLOY PRD</text><text x="837" y="76" fill="#fff">refresh + test</text>
+          <g stroke="#29B5E8" stroke-width="3" marker-end="url(#ar3)">
+            <line x1="135" y1="62" x2="158" y2="62"/><line x1="290" y1="62" x2="313" y2="62"/><line x1="445" y1="62" x2="468" y2="62"/><line x1="600" y1="62" x2="623" y2="62"/><line x1="755" y1="62" x2="778" y2="62"/>
+          </g>
+          <text x="450" y="125" class="sub">PURGE the sandbox when the branch closes &middot; one concurrency group per environment</text>
+        </g>
+      </svg>
+    </div>
+<pre><code><span class="c"># .github/workflows/dcm.yml (excerpt) - dcm/* actions are PREVIEW; the PRD job uses plain snow CLI</span>
+deploy-prd:
+  needs: deploy-qa
+  environment: PRD                 <span class="c"># required reviewers = approval gate</span>
+  concurrency: dcm-deploy-PRD      <span class="c"># never two deploys to one environment at once</span>
+  steps:
+    - uses: snowflakedb/snowflake-cli-action@v2
+      with: { use-oidc: true, cli-version: <span class="s">"3.31.0"</span> }
+    - run: snow dcm plan --target PRD --save-output
+    - run: test $(jq <span class="s">'[.changeset[]|select(.type=="DROP" and (.object_id.domain|IN("DATABASE","SCHEMA","TABLE","STAGE","DYNAMIC_TABLE")))]|length'</span> out/plan_result.json) -eq 0
+    - run: snow dcm deploy --target PRD --alias <span class="s">"release-${{ github.sha }}"</span>
+    - run: snow dcm refresh --target PRD &amp;&amp; snow dcm test --target PRD</code></pre>
+    <ul>
+      <li><strong>Authentication:</strong> OIDC workload identity federation or key pair, with one service user and role per environment. No long-lived passwords; GitHub stores only the user name.</li>
+      <li><strong>Branching:</strong> trunk-based with short-lived feature branches. Promote the <em>same commit</em> to PRD; only configuration changes.</li>
+      <li><strong>Order inside a release:</strong> object state (DCM), then code-backed objects (CLI), then refresh or transform, then validate.</li>
+      <li><strong>Know where checks stop:</strong> PLAN proves objects can be created, but it doesn't run task, procedure or alert logic. The sample drop check covers only top-level data objects, so humans still read the PLAN on the PR.</li>
+    </ul>
+
+    <h3>Production gotchas</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Behavior</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td>Removing a DEFINE drops the object on the next deploy</td><td>Make PLAN review (especially DROP) a required PR check</td></tr>
+        <tr><td>Partial deploys: DDL commits as it goes</td><td>Fix the cause and deploy again; DCM converges to the defined state</td></tr>
+        <tr><td>Renames, some column type changes, immutable properties</td><td>Do them outside DCM (or drop and recreate), then update the definition until PLAN is empty</td></tr>
+        <tr><td>Grants created outside DCM are not revoked</td><td>Scheduled SHOW GRANTS comparison, or a dedicated permissions tool</td></tr>
+        <tr><td>New tasks and alerts deploy suspended; STARTED is reasserted each deploy</td><td>Declare the state per environment, as this lab does</td></tr>
+        <tr><td>Rendered definitions and history are stored as plain text</td><td>No secrets in definitions; use integrations or secrets created outside DCM</td></tr>
+        <tr><td>Dropping the project object deletes deployment history</td><td>Lock DROP DCM PROJECT behind the owner role; audit with MONITOR</td></tr>
+      </tbody></table></div>
+
+    <h3>Adopting what already exists</h3>
+    <p>Run <code>GET_DDL</code>, change <code>CREATE</code> to <code>DEFINE</code>, template the names, and re-run PLAN until it shows <strong>zero changes</strong> for the adopted objects. Then deploy to take them under management. The project owner role must own the objects, directly or through role inheritance. Snowflake Labs publishes migration tooling to speed this up, and Cortex Code's DCM skill automates the loop.</p>
+
+    <h3>Anti-patterns</h3>
+    <div class="grid">
+      <div><h4>Two tools, one object</h4><p>DCM and Terraform (or dbt hooks) both changing a warehouse means endless drift. Give each object one owner.</p></div>
+      <div><h4>"Git connected" = DevOps</h4><p>A Git repository in Snowflake gives you no approvals, ordered environments or gates. Run deployments from CI.</p></div>
+      <div><h4>EXECUTE IMMEDIATE FROM loops</h4><p>No history, no run-once guarantee, no plan. Keep it for ad-hoc scripts.</p></div>
+      <div><h4>One project, many configs</h4><p>Deploying QA config into the DEV project drops DEV-only objects. Use one project per environment.</p></div>
+    </div>
+
+    <h3>Choosing the combination</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Situation</th><th>Sensible starting point</th></tr></thead>
+      <tbody>
+        <tr><td>New to change management, mostly supported objects, wants native tooling</td><td>DCM Projects + dbt Projects + Tasks, plus a tracked script path for data fixes</td></tr>
+        <tr><td>Frequent breaking table changes, backfills, renames</td><td>schemachange (with CLI steps) + dbt</td></tr>
+        <tr><td>Team already fluent in Flyway or Liquibase</td><td>Keep it for database objects, plus Snowflake CLI for code-backed objects</td></tr>
+        <tr><td>Infra team runs Terraform for the cloud</td><td>Terraform for integrations, network and account containers; DCM inside databases</td></tr>
+        <tr><td>Mostly dynamic tables and simple pipelines</td><td>DCM end to end: dynamic tables, tasks, expectations</td></tr>
+        <tr><td>Must revoke every undeclared privilege</td><td>A dedicated permissions tool (for example Permifrost) for grants, any tool for objects</td></tr>
+      </tbody></table></div>
+  </section>
+
+  <!-- ============================================================ 6. RECAP -->
+  <section id="recap">
+    <span class="kicker">Section 6 &middot; 38-40 min</span>
+    <h2>Recap</h2>
+    <div class="card">
+      <h4>Production readiness checklist</h4>
+      <ol>
+        <li>Ownership map written: what DCM owns, what dbt, Terraform and the IdP own.</li>
+        <li>One project object and one owner role per environment; PRD owner granted only to a CI service user.</li>
+        <li>All account-level names templated; configuration is the only difference between environments.</li>
+        <li>PR runs a full PLAN; drops are reviewed and machine-checked; PRD requires approval.</li>
+        <li>Deployments are serialized per environment and always carry an alias (commit SHA or release).</li>
+        <li>Post-deploy verification: expectations (TEST, preview) or GA smoke queries.</li>
+        <li>Scheduled full PLAN for drift; scheduled grant comparison if undeclared privileges matter.</li>
+        <li>Breaking changes use expand, migrate, contract; data fixes go through a tracked imperative path.</li>
+        <li>Auditors get READ and MONITOR, not ownership.</li>
+      </ol>
+    </div>
+    <h3>Resources</h3>
+    <ul>
+      <li><a href="https://docs.snowflake.com/en/user-guide/dcm-projects/dcm-projects-overview">DCM Projects overview</a></li>
+      <li><a href="https://docs.snowflake.com/en/user-guide/dcm-projects/dcm-projects-use">Create and deploy DCM Projects</a></li>
+      <li><a href="https://docs.snowflake.com/en/sql-reference/sql/execute-dcm-project">EXECUTE DCM PROJECT reference</a></li>
+      <li><a href="https://docs.snowflake.com/en/user-guide/dcm-projects/dcm-projects-cicd">Collaboration and CI/CD for DCM Projects</a></li>
+      <li><a href="https://docs.snowflake.com/en/user-guide/dcm-projects/dcm-projects-supported-entities">Supported entities (check GA vs preview)</a></li>
+      <li><a href="https://docs.snowflake.com/en/developer-guide/builders/devops-with-snowflake">DevOps with Snowflake</a></li>
+    </ul>
+  </section>
+
+  </div>
+  <footer>Based on Snowflake documentation. Product documentation is the source of truth; feature status (GA or preview) can change, so check the supported-entities page before implementing.</footer>
+</main>
+
+<script>
+(function () {
+  // Highlight the section in view.
+  var links = Array.prototype.slice.call(document.querySelectorAll('.nav a'));
+  var byId = {};
+  links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+  if ('IntersectionObserver' in window) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting && byId[e.target.id]) {
+          links.forEach(function (l) { l.classList.remove('active'); });
+          byId[e.target.id].classList.add('active');
+        }
+      });
+    }, { rootMargin: '-30% 0px -60% 0px' });
+    Object.keys(byId).forEach(function (id) { var s = document.getElementById(id); if (s) obs.observe(s); });
+  }
+
+  // 40-minute session timer with the agenda phase.
+  var phases = [[4, 'Why DCM'], [11, 'Concepts'], [16, 'Environment strategy'], [34, 'Hands-on lab'], [38, 'CI/CD & production'], [40, 'Recap']];
+  var total = 40 * 60, elapsed = 0, handle = null;
+  var clock = document.getElementById('clock'), phase = document.getElementById('phase'), startBtn = document.getElementById('startBtn');
+  function render() {
+    var left = Math.max(total - elapsed, 0);
+    clock.textContent = String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
+    var m = elapsed / 60, label = 'Time is up';
+    for (var i = 0; i < phases.length; i++) { if (m < phases[i][0]) { label = phases[i][1] + ' (until ' + phases[i][0] + ' min)'; break; } }
+    phase.textContent = elapsed === 0 && !handle ? 'Not started' : label;
+  }
+  startBtn.addEventListener('click', function () {
+    if (handle) { clearInterval(handle); handle = null; startBtn.textContent = 'Resume'; return; }
+    handle = setInterval(function () { elapsed++; render(); if (elapsed >= total) { clearInterval(handle); handle = null; } }, 1000);
+    startBtn.textContent = 'Pause'; render();
+  });
+  document.getElementById('resetBtn').addEventListener('click', function () {
+    if (handle) clearInterval(handle); handle = null; elapsed = 0; startBtn.textContent = 'Start'; render();
+  });
+  render();
+})();
+</script>
+</body>
+</html>

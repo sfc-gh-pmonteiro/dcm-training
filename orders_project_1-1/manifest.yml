@@ -1,0 +1,66 @@
+# =============================================================================
+# Orders data product - DCM manifest (manifest v2)
+#
+# One project object per environment. All targets live in one account and are
+# isolated by env_suffix and by a dedicated deployer (owner) role per target.
+# For a multi-account setup, change account_identifier per target; the
+# project_name can then be identical across accounts.
+# =============================================================================
+manifest_version: 2
+type: DCM_PROJECT
+default_target: DEV
+
+targets:
+  DEV:
+    account_identifier: MYORG-MYACCOUNT        # SELECT CURRENT_ORGANIZATION_NAME() || '-' || CURRENT_ACCOUNT_NAME();
+    project_name: DCM_TRAINING.PROJECTS.ORDERS_DEV
+    project_owner: DCM_DEVELOPER
+    templating_config: DEV
+  QA:
+    account_identifier: MYORG-MYACCOUNT        # SELECT CURRENT_ORGANIZATION_NAME() || '-' || CURRENT_ACCOUNT_NAME();
+    project_name: DCM_TRAINING.PROJECTS.ORDERS_QA
+    project_owner: DCM_QA_DEPLOYER
+    templating_config: QA
+  PRD:
+    account_identifier: MYORG-MYACCOUNT        # SELECT CURRENT_ORGANIZATION_NAME() || '-' || CURRENT_ACCOUNT_NAME();
+    project_name: DCM_TRAINING.PROJECTS.ORDERS_PRD
+    project_owner: DCM_PROD_DEPLOYER
+    templating_config: PRD
+  # Per-ticket sandbox. Create the project object on demand and override
+  # env_suffix at runtime, e.g. --variable "env_suffix='_SBX_STORY_1234'".
+  SANDBOX:
+    account_identifier: MYORG-MYACCOUNT        # SELECT CURRENT_ORGANIZATION_NAME() || '-' || CURRENT_ACCOUNT_NAME();
+    project_name: DCM_TRAINING.PROJECTS.ORDERS_SANDBOX
+    project_owner: DCM_DEVELOPER
+    templating_config: SANDBOX
+
+templating:
+  defaults:
+    env_suffix: '_DEV'
+    project_owner_role: 'DCM_DEVELOPER'
+    wh_size: 'XSMALL'
+    dt_lag: '1 hour'
+    retention_days: 1
+    task_schedule: 'USING CRON 0 6 * * * UTC'
+    task_state: 'SUSPENDED'
+    users: []
+    teams:
+      - name: 'FINANCE'
+        raw_access: true
+      - name: 'MARKETING'
+        raw_access: false
+  configurations:
+    DEV: {}
+    SANDBOX:
+      env_suffix: '_SBX'
+    QA:
+      env_suffix: '_QA'
+      project_owner_role: 'DCM_QA_DEPLOYER'
+    PRD:
+      env_suffix: '_PRD'
+      project_owner_role: 'DCM_PROD_DEPLOYER'
+      wh_size: 'SMALL'
+      dt_lag: '30 minutes'
+      retention_days: 7
+      task_schedule: 'USING CRON 0 * * * * UTC'
+      task_state: 'STARTED'
